@@ -1,0 +1,52 @@
+{
+  "name": "stellar-ramp-scaffold",
+  "version": "0.3.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "husky || true"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{js,mjs,json,css,yml,yaml}": [
+      "prettier --write"
+    ]
+  },
+  "dependencies": {
+    "@creit.tech/stellar-wallets-kit": "^2.1.0",
+    "@stellar/stellar-sdk": "^15.0.1",
+    "@tanstack/react-query": "^5.86.0",
+    "jose": "^6.0.11",
+    "next": "^15.5.22",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "server-only": "^0.0.1",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.30",
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.2.56",
+    "@types/react-dom": "^18.2.19",
+    "axios": "^1.12.2",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "15.1.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.2",
+    "prettier": "^3.9.4",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.9"
+  }
+}

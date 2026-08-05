@@ -1,0 +1,791 @@
+/* ====== Reset/Base simples ====== */
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg, #090a17);
+  color: var(--ink, #c9cbd2);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ====== Design tokens ====== */
+/* Fonte única de cores/raios/z-index. Componentes devem consumir estes tokens em
+   vez de repetir hex crus - pré-requisito para um futuro light theme (basta
+   redefinir os valores sob prefers-color-scheme / [data-theme]). */
+:root {
+  /* Paleta da marca PagFinance (pag.finance, tema `pagcrypto`): teal sobre
+     navy profundo. Os valores vêm do oklch do site, convertidos para hex. */
+
+  /* superfícies */
+  --bg: #090a17; /* base-200 - fundo da página */
+  --card: #13152e; /* base-100 - superfície */
+  --card-2: #1a1b2e; /* base-300 - elevado */
+  --border: #262a45;
+  --input-bg: #0f1124;
+
+  /* texto */
+  --ink: #c9cbd2; /* base content */
+  --muted: #8596ae;
+
+  /* marca + estados semânticos */
+  --primary: #00d4aa;
+  --primary-hi: #14e0cc; /* teal claro - hover/foco */
+  --primary-ink: #00100b; /* texto sobre o teal */
+  --accent: #00b894;
+  --success: #00d4aa;
+  --danger: #ff6b6b;
+  --danger-ink: #ffb3b3; /* texto de erro sobre fundo escuro */
+  --warning: #ffc22d;
+  --info: #14e0cc;
+
+  /* tipografia - Fraunces (display) + Inter (texto), como no site da marca.
+     `--font-*` são injetadas pelo next/font em app/layout.tsx. */
+  --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
+  --font-body:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* ritmo de espaçamento */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* raios */
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+
+  /* foco (acessibilidade) */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--primary) 32%, transparent);
+
+  /* camadas (z-index) - escala nomeada em vez de números mágicos */
+  --z-modal: 1000;
+  --z-toast: 1100;
+}
+
+/* ====== Foco visível (teclado) ======
+   Contorno consistente para navegação por teclado em TODOS os interativos.
+   `:where(...)` tem especificidade 0, então componentes podem sobrescrever. */
+:where(
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [tabindex],
+  [role='button'],
+  .wallet-tile
+):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ====== Layout helpers ====== */
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.row {
+  display: grid;
+  gap: 16px;
+}
+.grid {
+  display: grid;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* ====== Partner (cash-in / cash-out) form UI ====== */
+/* Layout de duas colunas: formulário | resumo/QR. Empilha no mobile. */
+.pf-cols {
+  display: grid;
+  gap: 22px;
+}
+@media (min-width: 860px) {
+  .pf-cols {
+    grid-template-columns: 1.15fr 0.85fr;
+    align-items: start;
+  }
+}
+.pf-form {
+  display: grid;
+  gap: 14px;
+}
+.pf-two {
+  display: grid;
+  gap: 14px;
+}
+@media (min-width: 560px) {
+  .pf-two {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.pf-label {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+.pf-input,
+.pf-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--ink);
+  font-size: 14px;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.pf-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 62%, transparent);
+}
+.pf-input:focus,
+.pf-select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+.pf-input:disabled,
+.pf-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.pf-panel {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+}
+.pf-panel-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pf-srow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.pf-srow:last-child {
+  border-bottom: 0;
+}
+.pf-srow .k {
+  color: var(--muted);
+  font-size: 13px;
+}
+.pf-srow .v {
+  font-weight: 600;
+  text-align: right;
+}
+.pf-total .v {
+  font-size: 20px;
+  color: var(--primary);
+}
+.pf-empty {
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  padding: 28px 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pf-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+.pf-actions .btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+/* Stepper simples do fluxo */
+.pf-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0 16px;
+}
+.pf-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pf-step .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.15s ease;
+}
+.pf-step.active .dot {
+  background: var(--primary);
+}
+.pf-step.active {
+  color: var(--ink);
+}
+.pf-step.done .dot {
+  background: var(--success);
+}
+.pf-arrow {
+  color: var(--border);
+  font-size: 12px;
+}
+.pf-check {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* ====== Card / Text ====== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+small,
+.muted {
+  color: var(--muted);
+}
+
+/* ====== Buttons ====== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--ink);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    opacity 0.15s ease,
+    border-color 0.15s ease;
+}
+.btn:hover {
+  background: color-mix(in srgb, var(--ink) 8%, var(--card-2));
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-sm {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 0.92rem;
+}
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+}
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: transparent;
+}
+.btn-primary:hover {
+  filter: brightness(0.92);
+}
+.btn-neutral {
+  background: var(--card-2);
+  border-color: var(--border);
+}
+.btn-neutral:hover {
+  background: color-mix(in srgb, var(--ink) 10%, var(--card-2));
+}
+
+/* ====== Join group (botões colados) ====== */
+.join {
+  display: inline-flex;
+}
+.join .btn {
+  border-radius: 0;
+}
+.join .btn:first-child {
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+.join .btn:last-child {
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+.join-item {
+  position: relative;
+} /* compat */
+
+/* ====== Badge ====== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--ink);
+}
+.badge-neutral {
+  background: var(--card-2);
+}
+
+/* ====== Alert ====== */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+/* ====== Rows ====== */
+.walletRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ====== Wallet tile (grade de carteiras instaladas) ====== */
+.wallet-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 8px;
+  min-height: 104px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: center;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.wallet-tile:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 8%, var(--card-2));
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
+}
+.wallet-tile:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ====== Code tag ====== */
+code {
+  background: var(--input-bg);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+/* ====== KYC / KYB console ==========================================
+   Layout da página /kyc. A página é um CONSOLE de teste da Partner API,
+   não uma landing: identificadores (CPF/CNPJ/carteira) usam a família
+   monoespaçada, e a numeração das seções reflete a ordem que a própria API
+   exige (identificação -> dados -> sócios -> envio), não é decoração.
+   =================================================================== */
+
+/* Vive dentro de `main.container` (max-width 960 + padding 24), então não
+   redefine largura nem padding lateral - só o respiro vertical. */
+.kyc-wrap {
+  padding-bottom: var(--space-7);
+}
+
+/* ── Cabeçalho ─────────────────────────────────────────────────────── */
+.kyc-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.kyc-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.kyc-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 600;
+  font-size: clamp(28px, 4.5vw, 40px);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+  color: #fff;
+}
+.kyc-lede {
+  margin: var(--space-3) 0 0;
+  max-width: 54ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* Selo de ambiente - mantém explícito que isto é um scaffold de teste. */
+.kyc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary-hi);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ── Alternância PF / PJ ───────────────────────────────────────────── */
+.kyc-seg {
+  display: inline-flex;
+  gap: 2px;
+  margin: var(--space-5) 0 var(--space-6);
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-2);
+}
+.kyc-seg button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 8px 18px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.kyc-seg button:hover:not(:disabled) {
+  color: var(--ink);
+}
+.kyc-seg button[aria-selected='true'] {
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-weight: 600;
+}
+.kyc-seg button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+/* ── Duas colunas: formulário + trilho ─────────────────────────────── */
+.kyc-cols {
+  display: grid;
+  gap: var(--space-6);
+  align-items: start;
+}
+@media (min-width: 880px) {
+  .kyc-cols {
+    grid-template-columns: minmax(0, 1fr) 272px;
+  }
+}
+
+/* ── Seção numerada ────────────────────────────────────────────────── */
+.sec {
+  position: relative;
+  padding: 0 0 var(--space-6) var(--space-6);
+  border-left: 1px solid var(--border);
+}
+.sec:last-of-type {
+  border-left-color: transparent;
+  padding-bottom: 0;
+}
+.sec-num {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translateX(-50%);
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.sec-head {
+  margin: 0 0 var(--space-4);
+  padding-top: 3px;
+}
+.sec-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.sec-note {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.sec-body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+/* Pares de campos. NÃO reutilizar `.grid` aqui: ela é de 3 colunas e deixa
+   uma coluna órfã quando a linha tem 2 campos. */
+.f-pair {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (min-width: 620px) {
+  .f-pair {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* ── Campo de documento (CPF / CNPJ) ───────────────────────────────── */
+.doc-field {
+  display: flex;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+.doc-field .pf-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+  letter-spacing: 0.02em;
+}
+.doc-field .btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Sócios (colapsáveis) ──────────────────────────────────────────── */
+.owner {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-2);
+  overflow: hidden;
+}
+.owner + .owner {
+  margin-top: var(--space-3);
+}
+.owner-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.owner-head:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+.owner-idx {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+.owner-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.owner-name .role {
+  margin-left: 8px;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--muted);
+}
+.owner-chev {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 0.18s ease;
+}
+.owner[data-open='true'] .owner-chev {
+  transform: rotate(90deg);
+}
+.owner-body {
+  display: grid;
+  gap: var(--space-4);
+  padding: 0 var(--space-4) var(--space-4);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+}
+
+/* ── Barra de ação ─────────────────────────────────────────────────── */
+.kyc-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+}
+.kyc-actions .hint {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Trilho lateral ────────────────────────────────────────────────── */
+.rail {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (min-width: 880px) {
+  .rail {
+    position: sticky;
+    top: var(--space-5);
+  }
+}
+.rail-card {
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.rail-label {
+  margin: 0 0 var(--space-2);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.rail-value {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.5;
+  word-break: break-all;
+  color: var(--ink);
+}
+.rail-empty {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Avisos inline ─────────────────────────────────────────────────── */
+.notice {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.notice strong {
+  font-weight: 600;
+}
+.notice-info {
+  border-color: color-mix(in srgb, var(--info) 30%, transparent);
+  background: color-mix(in srgb, var(--info) 8%, transparent);
+  color: #d6f3ff;
+}
+.notice-warn {
+  border-color: color-mix(in srgb, var(--warning) 32%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+  color: #ffe6ad;
+}
+.notice-error {
+  border-color: color-mix(in srgb, var(--danger) 38%, transparent);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger-ink);
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .owner-chev,
+  .kyc-seg button {
+    transition: none;
+  }
+}

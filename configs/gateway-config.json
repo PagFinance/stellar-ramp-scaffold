@@ -1,0 +1,61 @@
+{
+  "chains": [
+    {
+      "id": 13,
+      "name": "Stellar",
+      "symbol": "XLM",
+      "explorer": "https://stellarchain.io",
+      "icon": "https://s2.coinmarketcap.com/static/img/coins/64x64/512.png",
+      "status": true,
+      "key": "stellar",
+      "family": "stellar",
+      "order": 1,
+      "assets": [
+        {
+          "id": 100,
+          "symbol": "XLM",
+          "name": "Stellar Lumens",
+          "icon": "https://s2.coinmarketcap.com/static/img/coins/64x64/512.png",
+          "address": "native",
+          "decimals": 7,
+          "order": 1,
+          "chainId": 13,
+          "status": true,
+          "chainName": "Stellar",
+          "coinGeckoId": "stellar",
+          "tokenVariant": "native"
+        },
+        {
+          "id": 101,
+          "symbol": "USDC",
+          "name": "USDC",
+          "icon": "https://s2.coinmarketcap.com/static/img/coins/64x64/3408.png",
+          "address": "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+          "decimals": 7,
+          "order": 2,
+          "chainId": 13,
+          "status": true,
+          "chainName": "Stellar",
+          "coinGeckoId": "usd-coin",
+          "tokenVariant": "credit_alphanum4",
+          "fixedRate": 1.75
+        },
+        {
+          "id": 102,
+          "symbol": "BRLP",
+          "name": "BRLP",
+          "icon": "https://zrmhagkkw5sllz7hvqqdvcaeu6hd3wggkrto6hhk346vc7w5lmtq.arweave.net/zFhwGUq3ZLXn56wgOogEp4492MZUZu8c6t89UX7dWyc",
+          "address": "GD65NNWGIP4TI642EVTHBLU4LU5L3JOS3RDMIC2Q52CCQDULQF4ALPOM",
+          "decimals": 7,
+          "order": 3,
+          "chainId": 13,
+          "status": false,
+          "chainName": "Stellar",
+          "tokenVariant": "credit_alphanum4",
+          "fixedRate": 1
+        }
+      ]
+    }
+  ],
+  "version": "2"
+}
