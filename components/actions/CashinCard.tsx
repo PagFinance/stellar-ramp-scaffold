@@ -68,17 +68,16 @@ export default function CashinCard() {
   }
 
   const onConfirm = async () => {
-    if (!name.trim()) {
-      toast.error('Informe o nome do pagador.')
-      return
+    // Nome, CPF/CNPJ e e-mail do pagador são opcionais - envia apenas o que foi
+    // preenchido e omite o bloco inteiro quando nada foi informado.
+    const customer = {
+      name: name.trim() || undefined,
+      taxID: taxID.trim() || undefined,
+      email: email.trim() || undefined,
     }
-    // CPF/CNPJ é opcional - envia apenas quando preenchido.
+    const hasCustomer = Object.values(customer).some(Boolean)
     const res = await cashin.confirmCharge({
-      customer: {
-        name: name.trim(),
-        taxID: taxID.trim() || undefined,
-        email: email.trim() || undefined,
-      },
+      customer: hasCustomer ? customer : undefined,
       comment: 'Cash-in (scaffold)',
     })
     if (res) toast.success('Cobrança criada - escaneie o QR para pagar.')
@@ -150,12 +149,12 @@ export default function CashinCard() {
             />
           </div>
 
-          {/* Dados do pagador - só após cotar. */}
+          {/* Dados do pagador - só após cotar. Todos opcionais. */}
           {quoted && (
             <>
               <div>
                 <label className="pf-label" htmlFor={`${uid}-name`}>
-                  Nome do pagador
+                  Nome do pagador (opcional)
                 </label>
                 <input
                   id={`${uid}-name`}
@@ -293,8 +292,8 @@ export default function CashinCard() {
                 <span className="v">R$ {fmtBRL(q.valuesAndFees.totalFeeFiat)}</span>
               </div>
               <p style={helpText}>
-                Cotação válida por ~{q.ttlSeconds}s. Preencha os dados do pagador e gere a cobrança
-                para travar este preço.
+                Cotação válida por ~{q.ttlSeconds}s. Gere a cobrança para travar este preço - os
+                dados do pagador são opcionais.
               </p>
             </div>
           ) : (

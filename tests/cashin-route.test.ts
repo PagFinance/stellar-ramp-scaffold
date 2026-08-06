@@ -125,7 +125,7 @@ describe('POST /api/partner/cashin/intent', () => {
     expect(client.cashinIntent).not.toHaveBeenCalled()
   })
 
-  it('rejeita sem customer.name', async () => {
+  it('aceita sem customer.name (nome do pagador é opcional)', async () => {
     const res = await intentPOST(
       post('http://x/api/partner/cashin/intent', {
         sender: SENDER,
@@ -133,8 +133,33 @@ describe('POST /api/partner/cashin/intent', () => {
         customer: { taxID: '12345678901' },
       }),
     )
-    expect(res.status).toBe(400)
-    expect(client.cashinIntent).not.toHaveBeenCalled()
+    expect(res.status).toBe(201)
+    expect(client.cashinIntent).toHaveBeenCalledTimes(1)
+    const [, upstream] = vi.mocked(client.cashinIntent).mock.calls[0]!
+    expect(upstream).toMatchObject({ quoteId: 'q_1', customer: { taxID: '12345678901' } })
+    expect(upstream.customer).not.toHaveProperty('name')
+  })
+
+  it('omite customer quando nenhum dado do pagador foi preenchido', async () => {
+    const res = await intentPOST(
+      post('http://x/api/partner/cashin/intent', {
+        sender: SENDER,
+        quoteId: 'q_1',
+        customer: { name: '  ', taxID: '' },
+      }),
+    )
+    expect(res.status).toBe(201)
+    const [, upstream] = vi.mocked(client.cashinIntent).mock.calls[0]!
+    expect(upstream.customer).toBeUndefined()
+  })
+
+  it('aceita sem o bloco customer', async () => {
+    const res = await intentPOST(
+      post('http://x/api/partner/cashin/intent', { sender: SENDER, quoteId: 'q_1' }),
+    )
+    expect(res.status).toBe(201)
+    const [, upstream] = vi.mocked(client.cashinIntent).mock.calls[0]!
+    expect(upstream.customer).toBeUndefined()
   })
 
   it('aceita sem customer.taxID (CPF/CNPJ é opcional)', async () => {

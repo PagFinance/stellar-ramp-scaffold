@@ -97,8 +97,11 @@ partner's deprecated `/cashin/charge*` aliases are **not** used):
 - `POST /api/partner/cashin/intent` → `cashinIntent(pubkey, …)` - creates the Pix charge
   (`brCode`/`qrCodeImage`), bound to `quoteId` so the price is locked (Bearer only - HMAC omitted when
   the user JWT is present; `Idempotency-Key` keyed on the `quoteId`). `intentId === correlationID`.
-  Only `customer.name` is required; `customer.taxID` (CPF/CNPJ) is **optional** - the QR is generated
-  without it (the partner-api only attaches a Woovi customer when name and taxID are both present).
+  The whole `customer` block is **optional** - `name`, `taxID` (CPF/CNPJ), `email` and `phone` alike.
+  The route trims each field, drops the empty ones and omits `customer` from the upstream body when
+  nothing is left; the QR is generated either way (the partner-api only attaches a Woovi customer
+  when name and taxID are both present, so a partial block changes nothing). `CashinCard` therefore
+  blocks nothing on the payer form - `Gerar cobrança Pix` works with every field empty.
 - `GET /api/partner/cashin/intent/[intentId]` → `cashinIntentStatus` - polled until
   `COMPLETED`/`EXPIRED`.
 

@@ -21,6 +21,20 @@ import type { CashinIntentRequest, CashinCustomer } from '@/lib/partner/types'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const CUSTOMER_FIELDS = ['name', 'taxID', 'email', 'phone'] as const
+
+/**
+ * Normaliza os dados do pagador: apara os campos, descarta os vazios e devolve
+ * `undefined` quando nada sobrou - aí `customer` nem entra no body upstream.
+ */
+function sanitizeCustomer(input?: CashinCustomer): CashinCustomer | undefined {
+  if (!input || typeof input !== 'object') return undefined
+  const filled = CUSTOMER_FIELDS.map(
+    (k) => [k, typeof input[k] === 'string' ? input[k].trim() : ''] as const,
+  ).filter(([, v]) => v.length > 0)
+  return filled.length ? (Object.fromEntries(filled) as CashinCustomer) : undefined
+}
+
 export async function OPTIONS() {
   return preflight()
 }
@@ -51,10 +65,11 @@ export async function POST(req: Request) {
   if (!quoteId && (typeof amount !== 'number' || amount <= 0)) {
     return fail(400, 'amount deve ser > 0 (BRL) quando não há quoteId.')
   }
-  if (!customer?.name) return fail(400, 'customer.name obrigatório.')
-  // CPF/CNPJ é opcional: sem ele a cobrança Pix é criada sem customer vinculado na
-  // Woovi (o backend só anexa o customer quando name E taxID vêm juntos). O QR é
-  // gerado normalmente. Formato, quando informado, é validado pela partner-api.
+  // Os dados do pagador são todos opcionais (nome, CPF/CNPJ, e-mail, telefone): a
+  // cobrança Pix é criada sem customer vinculado na Woovi (o backend só anexa o
+  // customer quando name E taxID vêm juntos). O QR é gerado normalmente. O formato
+  // do taxID, quando informado, é validado pela partner-api.
+  const cleanCustomer = sanitizeCustomer(customer)
 
   const idempotencyKey = req.headers.get('idempotency-key') ?? undefined
 
@@ -64,7 +79,7 @@ export async function POST(req: Request) {
 
   const upstream: CashinIntentRequest = {
     amount: amount ?? 0,
-    customer,
+    customer: cleanCustomer,
     quoteId,
     additionalInfo: body.additionalInfo,
     expiresIn: body.expiresIn,
