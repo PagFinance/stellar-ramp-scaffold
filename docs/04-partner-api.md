@@ -86,14 +86,24 @@ partner's deprecated `/cashin/charge*` aliases are **not** used):
   `valuesAndFees` / `priceContext`. This is the step that makes it an onramp: it surfaces how much
   crypto the user receives and at what rate.
 
+  > **What the user buys - XLM only.** This scaffold's cash-in offers exactly one asset: **XLM on
+  > Stellar**, `assetId 100`, read from the local `configs/gateway-config.json` via
+  > `lib/partner/cashinAssets.ts#getCashinAsset`. The Stellar chain in that config also carries USDC
+  > (`101`) and BRLP (`102`) - both are deliberately **out** of the cash-in offer, not merely hidden.
+  > There is no selector because there is no choice: `CashinCard` renders network and asset as
+  > read-only fields and `useCashin` sends `assetId: 100` on the quote. The restriction is enforced
+  > on both sides - `app/api/partner/cashin/quote` rejects any other `assetId` with a 400
+  > (`isAllowedCashinAssetId`), so it survives a hand-crafted request, not just the UI. A missing
+  > `assetId` is still accepted (legacy value-only quote), which is also what happens if XLM's
+  > `status` is flipped to `false` in the config. `tests/cashinAssets.test.ts` pins the id.
+  >
   > **Delivery model - legacy (Stellar).** The partner does **not** validate `destinationWallet` for
   > Stellar (`cashin.service.ts` `isValidDestinationForChain` accepts only EVM `0x…` / Solana base58;
   > Stellar resolves to `false`), so an on-chain `destinationWallet` would **400** the quote.
   > `useCashin` therefore **omits `destinationWallet`** and takes the **legacy path**
   > (`feature:'cashin'`): a paid Pix emits `CASHIN_COMPLETED` **without** `deliveryId` and an operator
-  > backend credits the crypto out-of-band. `CashinCard` shows no network/asset selector - it's a
-  > value-only Pix charge. (`RequestQuoteInput` still accepts an optional `destinationWallet`, but the
-  > Stellar `CashinCard` never sets it.)
+  > backend credits the crypto out-of-band. (`RequestQuoteInput` still accepts an optional
+  > `destinationWallet`, but the Stellar `CashinCard` never sets it.)
 - `POST /api/partner/cashin/intent` → `cashinIntent(pubkey, …)` - creates the Pix charge
   (`brCode`/`qrCodeImage`), bound to `quoteId` so the price is locked (Bearer only - HMAC omitted when
   the user JWT is present; `Idempotency-Key` keyed on the `quoteId`). `intentId === correlationID`.
