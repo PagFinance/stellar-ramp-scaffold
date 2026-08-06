@@ -9,13 +9,18 @@
 // Scaffold exclusivo do Stellar: a partner-api não valida `destinationWallet`
 // para Stellar, então o cash-in segue o caminho legado (só-valor) - o backend do
 // parceiro credita a cripto após o pagamento.
+//
+// Ativo: **apenas XLM**. Não há seletor porque não há escolha - o `assetId` vem do
+// `configs/gateway-config.json` (ver `lib/partner/cashinAssets.ts`, XLM = 100) e a
+// rota `app/api/partner/cashin/quote` rejeita qualquer outro id.
 
-import React, { useId, useState } from 'react'
+import React, { useId, useMemo, useState } from 'react'
 import { useWalletWeb3 } from '@/hooks/useWalletWeb3'
 import { useCashin } from '@/hooks/useCashin'
 import { useToast } from '@/components/toast/ToastProvider'
 import QrDisplay from '@/components/partner/QrDisplay'
 import { helpText } from '@/components/partner/formStyles'
+import { getCashinAsset } from '@/lib/partner/cashinAssets'
 import type { CashinQuoteResponse } from '@/lib/partner/types'
 
 function statusBadge(phase: string, status?: string) {
@@ -26,10 +31,10 @@ function statusBadge(phase: string, status?: string) {
   return st || '-'
 }
 
-/** "USDC/BRL" → "USDC". Fallback para "cripto". */
-function assetSymbol(quote: CashinQuoteResponse | null) {
+/** "XLM/BRL" → "XLM". Fallback para o símbolo do ativo ofertado ou "cripto". */
+function assetSymbol(quote: CashinQuoteResponse | null, fallback?: string) {
   const pair = quote?.priceContext?.pair ?? ''
-  return pair.split('/')[0] || 'cripto'
+  return pair.split('/')[0] || fallback || 'cripto'
 }
 
 function fmtCrypto(n: number) {
@@ -37,7 +42,10 @@ function fmtCrypto(n: number) {
 }
 
 function fmtBRL(n: number) {
-  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return n.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 export default function CashinCard() {
@@ -51,6 +59,10 @@ export default function CashinCard() {
   const [taxID, setTaxID] = useState('')
   const [email, setEmail] = useState('')
 
+  // Ativo fixo do scaffold (XLM). `null` só se a oferta for desligada no
+  // gateway-config - aí o quote vai sem `assetId` (legado) em vez de quebrar.
+  const asset = useMemo(() => getCashinAsset(), [])
+
   const q = cashin.quote
   const c = cashin.charge
   const created = Boolean(c)
@@ -62,7 +74,7 @@ export default function CashinCard() {
       toast.error('Informe um valor em BRL maior que zero.')
       return
     }
-    const res = await cashin.requestQuote({ amount: amt })
+    const res = await cashin.requestQuote({ amount: amt, assetId: asset?.id })
     if (res) toast.success('Cotação gerada - confira o valor a receber.')
     else toast.error('Não foi possível cotar. Veja o detalhe abaixo.')
   }
@@ -108,7 +120,14 @@ export default function CashinCard() {
 
   return (
     <section className="card">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 10,
+          flexWrap: 'wrap',
+        }}
+      >
         <h2 style={{ margin: 0 }}>Cash-in</h2>
         <span className="muted">Pix → cripto</span>
       </div>
@@ -135,6 +154,37 @@ export default function CashinCard() {
       <div className="pf-cols">
         {/* ── Coluna do formulário ─────────────────────────────────────── */}
         <form className="pf-form" onSubmit={onSubmitPrimary} noValidate>
+          {/* Ativo a comprar - fixo em XLM, exibido como campo somente-leitura para
+              deixar explícito o que será entregue (não é um seletor). */}
+          {asset && (
+            <div className="pf-two">
+              <div>
+                <label className="pf-label" htmlFor={`${uid}-net`}>
+                  Rede
+                </label>
+                <input
+                  id={`${uid}-net`}
+                  className="pf-input"
+                  value={asset.chainName}
+                  readOnly
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="pf-label" htmlFor={`${uid}-asset`}>
+                  Ativo a comprar
+                </label>
+                <input
+                  id={`${uid}-asset`}
+                  className="pf-input"
+                  value={`${asset.symbol} - ${asset.name}`}
+                  readOnly
+                  disabled
+                />
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="pf-label" htmlFor={`${uid}-amount`}>
               Valor (BRL)
@@ -242,7 +292,7 @@ export default function CashinCard() {
                 <div className="pf-srow">
                   <span className="k">Você recebe ≈</span>
                   <span className="v">
-                    {fmtCrypto(c.cryptoEstimate)} {assetSymbol(q)}
+                    {fmtCrypto(c.cryptoEstimate)} {assetSymbol(q, asset?.symbol)}
                   </span>
                 </div>
               )}
@@ -278,7 +328,7 @@ export default function CashinCard() {
               <div className="pf-srow">
                 <span className="k">Você recebe ≈</span>
                 <span className="v">
-                  {fmtCrypto(q.valuesAndFees.paymentInCrypto)} {assetSymbol(q)}
+                  {fmtCrypto(q.valuesAndFees.paymentInCrypto)} {assetSymbol(q, asset?.symbol)}
                 </span>
               </div>
               {q.priceContext && (
@@ -306,8 +356,8 @@ export default function CashinCard() {
       </div>
 
       <p style={helpText}>
-        Após o pagamento, o parceiro credita a cripto pelo backend (evento{' '}
-        <code>CASHIN_COMPLETED</code>).
+        Após o pagamento, o parceiro credita {asset?.symbol ?? 'a cripto'} pelo backend (evento{' '}
+        <code>CASHIN_COMPLETED</code>). Este scaffold compra apenas XLM na rede Stellar.
       </p>
     </section>
   )

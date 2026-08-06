@@ -95,6 +95,7 @@ plus `prettier`).
 
 | Gotcha | Detail |
 |--------|--------|
+| Cash-in sells XLM and nothing else | The Stellar chain in `configs/gateway-config.json` carries XLM (`100`), USDC (`101`) and BRLP (`102`), but cash-in offers **only XLM** - `lib/partner/cashinAssets.ts`. `CashinCard` shows it as a read-only field (no selector) and `app/api/partner/cashin/quote` 400s any other `assetId`, so the rule holds against a hand-crafted request too. Widening the offer means changing that module, not the card. Cash-**out** is unaffected and still reads `accepted-cryptos` from the partner. |
 | `ethereum/` folder, `'evm'` id | EVM types live at `lib/processor/ethereum/` (folder `ethereum/`, not `evm/`), though the `ChainId` is `'evm'`. |
 | No client-side interpretation | The Partner API builds the tx payload; the client only signs. `lib/processor/InstructionInterpreter.ts` is now just transport types (`InterpretRequest`/`RawInstruction`/`InterpretResponse`). Two dispatch modes remain, by capability: `submitTransferInterpret` (Solana/EVM/Stellar, signs the API instruction as-is) and `submitTransfer` (TRON/XRPL, builds inline from the API's authoritative `receiver`/`memo`/`amount`). The only surviving interpreter is `lib/processor/xrpl/interpret.ts` (XRPL `Payment` assembly). |
 | TON is not wired | `lib/processor/toncoin/interpret.ts` exists but TON is absent from `CHAIN_ORDER`/`ChainId`. Treat it as unwired. |

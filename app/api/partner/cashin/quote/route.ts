@@ -16,6 +16,7 @@ import {
   handleError,
   requireSender,
 } from '@/lib/partner/routeHelpers'
+import { isAllowedCashinAssetId, getCashinAssetId } from '@/lib/partner/cashinAssets'
 import type { CashinQuoteRequest } from '@/lib/partner/types'
 
 export const runtime = 'nodejs'
@@ -46,6 +47,15 @@ export async function POST(req: Request) {
   const { sender, amount } = body ?? {}
   if (!sender || sender.length < 10) return fail(400, 'sender (pubkey) obrigatório.')
   if (typeof amount !== 'number' || amount <= 0) return fail(400, 'amount deve ser > 0 (BRL).')
+
+  // Este scaffold compra apenas XLM: um `assetId` diferente é recusado aqui, não só
+  // escondido na UI (ver `lib/partner/cashinAssets.ts`). Ausente = fluxo legado.
+  if (!isAllowedCashinAssetId(body.assetId)) {
+    return fail(
+      400,
+      `assetId inválido: o cash-in deste scaffold aceita apenas XLM (${getCashinAssetId()}).`,
+    )
+  }
 
   const resolved = await requireSender(req, sender)
   if (resolved instanceof NextResponse) return resolved
