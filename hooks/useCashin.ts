@@ -6,7 +6,7 @@
 //
 //   requestQuote({ amount }) → cota fiat→cripto (mostra quanto de cripto o
 //     usuário recebe + preço) e devolve um `quoteId` de uso único.
-//   confirmCharge({ customer }) → cria a cobrança amarrada ao quoteId,
+//   confirmCharge({ customer? }) → cria a cobrança amarrada ao quoteId,
 //     renderiza o QR (brCode/qrCodeImage) e faz polling do status até
 //     COMPLETED/EXPIRED.
 //
@@ -55,7 +55,8 @@ export interface RequestQuoteInput {
 }
 
 export interface ConfirmChargeInput {
-  customer: CashinCustomer
+  /** Dados do pagador - opcionais. Omita quando nada foi preenchido. */
+  customer?: CashinCustomer
   expiresIn?: number
   comment?: string
   webhookUrl?: string

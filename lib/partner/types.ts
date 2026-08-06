@@ -116,7 +116,8 @@ export interface CashoutIntentStatus {
 
 // ── Cash-in (onramp: fiat → cripto) ──────────────────────────────────────────
 export interface CashinCustomer {
-  name: string
+  /** Nome do pagador. Opcional - a partner-api gera a cobrança Pix sem ele. */
+  name?: string
   /** CPF/CNPJ do pagador. Opcional - a partner-api gera a cobrança Pix sem ele. */
   taxID?: string
   email?: string
@@ -153,7 +154,8 @@ export interface CashinQuoteResponse {
  */
 export interface CashinIntentRequest {
   amount: number
-  customer: CashinCustomer
+  /** Dados do pagador. Todo o bloco é opcional - omitido quando nada foi preenchido. */
+  customer?: CashinCustomer
   /** Amarra a cobrança a uma cotação prévia (uso único). */
   quoteId?: string
   additionalInfo?: Array<{ key: string; value: string }>
