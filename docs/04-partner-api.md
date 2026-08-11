@@ -97,13 +97,19 @@ partner's deprecated `/cashin/charge*` aliases are **not** used):
   > `assetId` is still accepted (legacy value-only quote), which is also what happens if XLM's
   > `status` is flipped to `false` in the config. `tests/cashinAssets.test.ts` pins the id.
   >
-  > **Delivery model - legacy (Stellar).** The partner does **not** validate `destinationWallet` for
-  > Stellar (`cashin.service.ts` `isValidDestinationForChain` accepts only EVM `0x…` / Solana base58;
-  > Stellar resolves to `false`), so an on-chain `destinationWallet` would **400** the quote.
-  > `useCashin` therefore **omits `destinationWallet`** and takes the **legacy path**
-  > (`feature:'cashin'`): a paid Pix emits `CASHIN_COMPLETED` **without** `deliveryId` and an operator
-  > backend credits the crypto out-of-band. (`RequestQuoteInput` still accepts an optional
-  > `destinationWallet`, but the Stellar `CashinCard` never sets it.)
+  > **Delivery model - on-chain.** `CashinCard` sends `destinationWallet = activeAddress` on the
+  > **quote** (never on the intent - the intent carries no wallet field; the destination is read from
+  > the `quoteId` snapshot). That single field selects the delivery path. Without it the partner logs
+  > `[onramp] quoted chain not deliverable today or no destination wallet; falling back to legacy
+  > cash-in` with `chain: "stellar"`, `chainSupported: true`, `hasDestination: false`, and a paid Pix
+  > emits `CASHIN_COMPLETED` **without** `deliveryId` - the crypto then has to be credited
+  > out-of-band by an operator, which in practice never happened.
+  >
+  > This scaffold shipped without the field (an outdated read of the partner's
+  > `isValidDestinationForChain`, which used to accept only EVM `0x…` / Solana base58), so **every**
+  > cash-in silently took the legacy path: money in, no XLM out. Confirmed against the partner logs on
+  > 2026-08-11 with a real R$5 charge (`rc_cashin_5532e87be72b445fb09d94558a674764`). Since `ChainId`
+  > is `'stellar'`-only, `activeAddress` is always a `G…` and needs no family check.
 - `POST /api/partner/cashin/intent` → `cashinIntent(pubkey, …)` - creates the Pix charge
   (`brCode`/`qrCodeImage`), bound to `quoteId` so the price is locked (Bearer only - HMAC omitted when
   the user JWT is present; `Idempotency-Key` keyed on the `quoteId`). `intentId === correlationID`.
