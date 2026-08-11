@@ -6,9 +6,13 @@
 //   2. Gerar cobrança (POST /cashin/intent) amarrada ao quoteId - exibe o QR Pix.
 //   3. Pagar e confirmar - polling do status até liquidar.
 //
-// Scaffold exclusivo do Stellar: a partner-api não valida `destinationWallet`
-// para Stellar, então o cash-in segue o caminho legado (só-valor) - o backend do
-// parceiro credita a cripto após o pagamento.
+// Scaffold exclusivo do Stellar: `destinationWallet` é SEMPRE a carteira conectada
+// (`ChainId` só tem 'stellar', então o address ativo é sempre um `G…`). É esse campo
+// que liga a entrega on-chain: sem ele a partner-api loga
+// `[onramp] … falling back to legacy cash-in` (chain: stellar, chainSupported: true,
+// hasDestination: false) e o Pix pago NUNCA vira XLM na carteira - alguém precisa
+// creditar na mão. Ele vai no QUOTE, não no intent: o intent não tem campo de
+// carteira, o destino sai do snapshot do quoteId.
 //
 // Ativo: **apenas XLM**. Não há seletor porque não há escolha - o `assetId` vem do
 // `configs/gateway-config.json` (ver `lib/partner/cashinAssets.ts`, XLM = 100) e a
@@ -21,6 +25,7 @@ import { useToast } from '@/components/toast/ToastProvider'
 import QrDisplay from '@/components/partner/QrDisplay'
 import { helpText } from '@/components/partner/formStyles'
 import { getCashinAsset } from '@/lib/partner/cashinAssets'
+import { shortenAddress } from '@/lib/helpers/shortenAddress'
 import type { CashinQuoteResponse } from '@/lib/partner/types'
 
 function statusBadge(phase: string, status?: string) {
@@ -49,7 +54,7 @@ function fmtBRL(n: number) {
 }
 
 export default function CashinCard() {
-  const { isConnected } = useWalletWeb3()
+  const { isConnected, activeAddress } = useWalletWeb3()
   const cashin = useCashin()
   const toast = useToast()
   const uid = useId()
@@ -74,7 +79,12 @@ export default function CashinCard() {
       toast.error('Informe um valor em BRL maior que zero.')
       return
     }
-    const res = await cashin.requestQuote({ amount: amt, assetId: asset?.id })
+    // `destinationWallet` = carteira conectada: é o que habilita a entrega on-chain.
+    const res = await cashin.requestQuote({
+      amount: amt,
+      assetId: asset?.id,
+      destinationWallet: activeAddress ?? undefined,
+    })
     if (res) toast.success('Cotação gerada - confira o valor a receber.')
     else toast.error('Não foi possível cotar. Veja o detalhe abaixo.')
   }
@@ -356,8 +366,9 @@ export default function CashinCard() {
       </div>
 
       <p style={helpText}>
-        Após o pagamento, o parceiro credita {asset?.symbol ?? 'a cripto'} pelo backend (evento{' '}
-        <code>CASHIN_COMPLETED</code>). Este scaffold compra apenas XLM na rede Stellar.
+        Após o pagamento, {asset?.symbol ?? 'a cripto'} é entregue on-chain na carteira conectada (
+        <code>{shortenAddress(activeAddress)}</code>). Este scaffold compra apenas XLM na rede
+        Stellar.
       </p>
     </section>
   )
