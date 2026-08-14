@@ -3,7 +3,7 @@
 // Proxy para POST /api/v1/users/kyc/sessions/legal-person (HMAC).
 // Onboarding KYB de pessoa jurídica.
 import { NextResponse } from 'next/server'
-import { kycLegalPerson } from '@/lib/partner/partnerClient'
+import { kycLegalPerson, PartnerApiError } from '@/lib/partner/partnerClient'
 import {
   preflight,
   enforceRateLimit,
@@ -47,6 +47,19 @@ export async function POST(req: Request) {
   if (!Array.isArray(body?.owners) || body.owners.length < 1) {
     return fail(400, 'owners: informe ao menos 1 sócio/representante.')
   }
+  // O KYB verifica a identidade de QUEM ASSINA pela empresa: sem representante
+  // legal não há ninguém para verificar. A partner-api recusa igual (400
+  // KYB_REPRESENTATIVE_MISSING); barrar aqui evita a viagem e devolve o mesmo
+  // código, para a tela tratar um caso só.
+  if (
+    !body.owners.some((o) => o?.ownerType === 'LEGAL_REPRESENTATIVE' || o?.ownerType === 'BOTH')
+  ) {
+    return fail(
+      400,
+      'Marque ao menos um sócio como representante legal (papel "Representante legal" ou "Sócio e representante").',
+      'KYB_REPRESENTATIVE_MISSING',
+    )
+  }
 
   // Validação de formato (a validação autoritativa é da partner-api).
   if (!isValidCNPJ(body.documentNumber)) return fail(400, 'CNPJ inválido.')
@@ -59,6 +72,20 @@ export async function POST(req: Request) {
     })
     return ok(data, 201)
   } catch (err) {
+    // 422 KYB_COMPANY_REJECTED carrega os checks da empresa - é a única
+    // informação que o formulário precisa para dizer o que reprovou (CNPJ
+    // baixado, razão social divergente, representante fora do QSA). Repassamos
+    // só esse bloco, nunca o payload upstream inteiro.
+    if (err instanceof PartnerApiError && err.code === 'KYB_COMPANY_REJECTED') {
+      const verification = (err.payload as { data?: { companyVerification?: unknown } } | undefined)
+        ?.data?.companyVerification
+      return fail(
+        422,
+        err.message,
+        err.code,
+        verification ? { companyVerification: verification } : undefined,
+      )
+    }
     return handleError(err)
   }
 }

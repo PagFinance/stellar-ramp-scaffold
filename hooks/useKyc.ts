@@ -25,6 +25,7 @@ import { getPartnerSession, establishPartnerSession } from '@/lib/partner/sessio
 import type {
   KycNaturalPersonRequest,
   KycLegalPersonRequest,
+  KybCompanyVerification,
   KycSession,
   KycSessionStatusValue,
 } from '@/lib/partner/types'
@@ -40,6 +41,13 @@ export interface UseKyc {
   busy: boolean
   error: string | null
   session: KycSession | null
+  /**
+   * Perna EMPRESA do KYB quando ela REPROVA (422). A sessão não chega a existir
+   * nesse caso - a partner-api não persiste nada, justamente para a empresa
+   * poder se regularizar e tentar de novo - então os checks vêm por aqui, e não
+   * por `session.companyVerification`.
+   */
+  companyRejection: KybCompanyVerification | null
   /** Retorna null em sucesso ou a mensagem de erro. */
   submitNaturalPerson: (body: KycNaturalPersonRequest) => Promise<string | null>
   submitLegalPerson: (body: KycLegalPersonRequest) => Promise<string | null>
@@ -52,6 +60,7 @@ export function useKyc(): UseKyc {
   const [phase, setPhase] = useState<KycPhase>('idle')
   const [error, setError] = useState<string | null>(null)
   const [session, setSession] = useState<KycSession | null>(null)
+  const [companyRejection, setCompanyRejection] = useState<KybCompanyVerification | null>(null)
 
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -67,6 +76,7 @@ export function useKyc(): UseKyc {
     setPhase('idle')
     setError(null)
     setSession(null)
+    setCompanyRejection(null)
   }, [])
 
   const toMessage = (e: unknown) =>
@@ -135,6 +145,7 @@ export function useKyc(): UseKyc {
       clearPoll()
       setError(null)
       setSession(null)
+      setCompanyRejection(null)
       setPhase('submitting')
       if (!(await ensureSession())) {
         setPhase('failed')
@@ -153,6 +164,13 @@ export function useKyc(): UseKyc {
         }
         return null
       } catch (e) {
+        // 422 KYB_COMPANY_REJECTED: a empresa reprovou na Receita. Não existe
+        // sessão para acompanhar - o que a tela mostra são os checks.
+        if (e instanceof PartnerRequestError && e.code === 'KYB_COMPANY_REJECTED') {
+          const v = (e.data as { companyVerification?: KybCompanyVerification } | undefined)
+            ?.companyVerification
+          if (v) setCompanyRejection(v)
+        }
         const m = toMessage(e)
         setError(m)
         setPhase('failed')
@@ -177,7 +195,16 @@ export function useKyc(): UseKyc {
   const busy = phase === 'submitting'
 
   return useMemo<UseKyc>(
-    () => ({ phase, busy, error, session, submitNaturalPerson, submitLegalPerson, reset }),
-    [phase, busy, error, session, submitNaturalPerson, submitLegalPerson, reset],
+    () => ({
+      phase,
+      busy,
+      error,
+      session,
+      companyRejection,
+      submitNaturalPerson,
+      submitLegalPerson,
+      reset,
+    }),
+    [phase, busy, error, session, companyRejection, submitNaturalPerson, submitLegalPerson, reset],
   )
 }

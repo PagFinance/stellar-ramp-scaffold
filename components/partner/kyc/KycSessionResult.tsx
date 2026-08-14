@@ -3,6 +3,7 @@
 //
 // Estado da sessão de onboarding KYC/KYB, exibido no trilho lateral da página.
 import React from 'react'
+import KybCompanyChecks from './KybCompanyChecks'
 import type { KycSession, KycSessionStatusValue } from '@/lib/partner/types'
 
 const STATUS_LABEL: Record<KycSessionStatusValue, string> = {
@@ -73,6 +74,21 @@ export default function KycSessionResult({
       <Row label="ID">{session.sessionId}</Row>
       <Row label="Documento">{session.documentMasked}</Row>
       <Row label="Provider">{session.provider}</Row>
+      {/* Numa sessão PJ o documento acima é o CNPJ, mas quem faz a
+          documentoscopia é uma PESSOA - sem esta linha não dá para saber de
+          quem é a selfie que o link vai pedir. */}
+      {session.representativeMasked ? (
+        <Row label="Representante legal">{session.representativeMasked}</Row>
+      ) : null}
+
+      {session.companyVerification ? (
+        <div style={{ marginTop: 14 }}>
+          <p className="rail-label" style={{ margin: '0 0 8px' }}>
+            Verificação da empresa
+          </p>
+          <KybCompanyChecks verification={session.companyVerification} compact />
+        </div>
+      ) : null}
 
       {session.rejectionReason ? (
         <p
@@ -98,7 +114,9 @@ export default function KycSessionResult({
             Continuar verificação ↗
           </a>
           <p className="rail-empty" style={{ fontSize: 11.5 }}>
-            Abre o provider para a captura de documento e selfie.
+            {session.representativeMasked
+              ? `Abre a captura de documento e selfie do representante legal (${session.representativeMasked}).`
+              : 'Abre o provider para a captura de documento e selfie.'}
           </p>
         </div>
       ) : null}

@@ -752,6 +752,20 @@ code {
   color: var(--muted);
 }
 
+/* Só para leitor de tela: o veredito de um check é comunicado visualmente por
+   cor + símbolo, que não chegam a quem usa leitor de tela. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* ── Avisos inline ─────────────────────────────────────────────────── */
 .notice {
   padding: var(--space-3) var(--space-4);

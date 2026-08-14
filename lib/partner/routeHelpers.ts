@@ -35,10 +35,22 @@ export function ok<T>(data: T, status = 200): NextResponse {
   )
 }
 
-/** Resposta de erro com o envelope padrão e CORS. */
-export function fail(status: number, error: string, code?: string): NextResponse {
+/**
+ * Resposta de erro com o envelope padrão e CORS.
+ *
+ * `data` é opcional e serve para o erro que CARREGA conteúdo estruturado - hoje
+ * só o 422 do KYB, que devolve os checks da empresa para a tela poder dizer o
+ * que exatamente reprovou. Nunca repasse o payload upstream inteiro aqui: só o
+ * bloco que a UI precisa, escolhido explicitamente pela rota.
+ */
+export function fail(status: number, error: string, code?: string, data?: unknown): NextResponse {
   return NextResponse.json(
-    { success: false, error, ...(code ? { code } : {}) },
+    {
+      success: false,
+      error,
+      ...(code ? { code } : {}),
+      ...(data !== undefined ? { data } : {}),
+    },
     { status, headers: { ...corsHeaders(), 'Cache-Control': 'no-store' } },
   )
 }
