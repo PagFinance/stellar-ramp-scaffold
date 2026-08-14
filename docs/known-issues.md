@@ -160,16 +160,20 @@ emits `CASHIN_COMPLETED` and an operator backend credits the crypto out-of-band.
 no network/asset selector - it's a value-only Pix charge. `RequestQuoteInput` still accepts an
 optional `destinationWallet`, but the Stellar card never sets it.
 
-### BUG-H18 - KYB (PJ / legal-person) has no active provider upstream → always 503 (⚠ partner-side, open)
+### BUG-H18 - KYB (PJ / legal-person) had no active provider upstream → always 503 (✅ RESOLVED)
 **Location:** `components/partner/kyc/KycLegalPersonForm.tsx`, `app/api/partner/kyc/legal-person/route.ts`
-The scaffold ships a complete PJ/KYB flow (form + proxy route + types), but the partner-api has **no
+The scaffold shipped a complete PJ/KYB flow (form + proxy route + types), but the partner-api had **no
 active PJ provider**: BigDataCorp declines legal-person and Celcoin is runtime-disabled, so
-`POST /users/kyc/sessions/legal-person` **always returns 503**. The KYB flow cannot complete
-end-to-end today. **Fix (not in scaffold's control):** the partner must enable a PJ provider; until
-then, treat KYB as unavailable (documented in `docs/04-partner-api.md`). PF (natural-person) works,
-**BR only**.
-> **Now surfaced in the UI.** `KycLegalPersonForm` opens with a warning banner (`LookupNotice`
-> `variant="warn"`) saying the submit is unavailable, so the user does not fill the whole company
-> plus the ownership structure only to hit a 503 at the end. The **CNPJ lookup on the same tab does
-> work** and is genuinely useful today (autofill + cadastral summary), which is why the tab stays
-> enabled instead of being hidden. Remove the banner when a PJ provider goes live.
+`POST /users/kyc/sessions/legal-person` always returned 503 and KYB could not complete end-to-end.
+**Resolved upstream without contracting a vendor:** the partner-api now **orchestrates** KYB itself in
+two legs - a synchronous company check against the Receita Federal registry (via the same CNPJ lookup
+chain this tab already used) plus the **legal representative's** documentoscopy, which is the ordinary
+PF flow over their CPF. See partner-api `docs/07-kyc-onboarding.md`.
+> **What changed in the scaffold.** The "submit unavailable" banner is gone, replaced by a notice that
+> explains the two legs up front. The form now **requires** an owner with `ownerType`
+> `LEGAL_REPRESENTATIVE` or `BOTH` (submit is disabled without one - there would be nobody to verify),
+> renders the company checks on a `422 KYB_COMPANY_REJECTED`, and the session rail shows
+> `companyVerification` plus the masked CPF of whoever must open the webview. Three refusals to expect,
+> all before any webview opens: `400 KYB_REPRESENTATIVE_MISSING`, `422 KYB_COMPANY_REJECTED` (no
+> session is persisted - fix and resend), `503 KYB_REGISTRY_UNAVAILABLE` (the registry check **fails
+> closed**; retry). Covered by `tests/kyb-route.test.ts`.

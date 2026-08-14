@@ -174,6 +174,40 @@ Três armadilhas que o mapeamento resolve e que não dá para inferir do contrat
 Campo ausente na consulta nunca vira string vazia sobrescrevendo o que o usuário digitou: o `patch`
 só carrega o que a fonte informou de fato.
 
+### KYB (PJ): duas pernas, e as três recusas
+
+`POST /api/partner/kyc/legal-person` não é "o KYC de PF com outro corpo". A partner-api **não compra**
+onboarding de PJ: ela orquestra o KYB em duas pernas (partner-api `docs/07-kyc-onboarding.md`).
+
+1. **Empresa (síncrona).** O CNPJ é confrontado com o registro da Receita Federal pela mesma cadeia
+   de lookup desta aba: existe, está `ATIVA`, a razão social confere, e o representante declarado
+   consta do QSA (cruzado contra o **CPF parcial** que a Receita publica). Um check cujo dado a fonte
+   não trouxe volta `SKIPPED` - que **não** é aprovação.
+2. **Pessoa (assíncrona).** A documentoscopia/selfie do **representante legal**, que é o fluxo de PF
+   de sempre sobre o CPF dele. É esta perna que leva a sessão a `APPROVED`/`REJECTED`, e é por isso
+   que o polling do `useKyc` continua idêntico ao do PF.
+
+Um `201` significa *a empresa passou e o representante ainda precisa se identificar*.
+
+Consequências práticas para esta tela, todas já implementadas:
+
+- **É obrigatório um sócio com papel `LEGAL_REPRESENTATIVE` ou `BOTH`.** Sem ele não há ninguém para
+  verificar: o botão de envio fica desabilitado e a rota de proxy recusa com
+  `400 KYB_REPRESENTATIVE_MISSING` antes de gastar a viagem até a API.
+- **Consulte o CNPJ antes de enviar.** O autofill do lookup usa exatamente a fonte que a perna 1 vai
+  conferir, então preencher pela consulta é o que faz a verificação passar de primeira.
+- **Reprovação da empresa não cria sessão.** No `422 KYB_COMPANY_REJECTED` a partner-api **não
+  persiste nada** (uma sessão `REJECTED` seria terminal e travaria a empresa mesmo depois de
+  regularizada). O formulário mostra os checks via `KybCompanyChecks` e o usuário corrige e reenvia;
+  `useKyc` expõe isso em **`companyRejection`**, não em `session`.
+- **`503 KYB_REGISTRY_UNAVAILABLE` é falha fechada**, não bug: sem conseguir consultar a Receita, a
+  API recusa em vez de aprovar uma empresa que não pôde checar. Basta repetir depois.
+
+A sessão traz dois campos extras só no PJ (`null` no PF): `companyVerification` (o bloco de checks,
+em claro - é dado público da Receita) e `representativeMasked`, o CPF mascarado de quem deve abrir o
+`webViewUrl`. O trilho lateral exibe os dois - sem o segundo não dá para saber de quem é a selfie que
+o link vai pedir. Coberto por `tests/kyb-route.test.ts`.
+
 ### Máscaras e o CNPJ alfanumérico
 
 `lib/partner/documentMask.ts` traz máscaras progressivas e idempotentes (aplicadas a cada tecla) para
@@ -285,10 +319,9 @@ whenever the authenticated `activeAddress` goes away or changes.
   unconfigured operation returns **`503`** (not 404) at call time:
   - **PF (natural-person)** works via BigDataCorp, but **`country` must be `BR`** - any other
     country → `503`.
-  - **PJ / legal-person (KYB) has no active provider** (BigDataCorp declines PJ; Celcoin disabled),
-    so `POST /kyc/sessions/legal-person` **always returns `503`**. The scaffold ships the full PJ
-    form/route, but it cannot succeed until the partner enables a PJ provider - treat KYB as
-    **not yet available** end-to-end (see `docs/known-issues.md`).
+  - **PJ / legal-person (KYB) works** and is **BR only**. There is still no PJ *provider*: the
+    partner-api orchestrates KYB itself out of a Receita-registry company check plus the legal
+    representative's documentoscopy - see *KYB* below (this closed BUG-H18).
 - **Cash-out submit is Stellar-only.** When the active chain isn't Stellar, `CashoutCard` renders a
   *"Rede ativa (…) não suportada no cash-out. Conecte uma carteira Stellar."* notice instead of the
   submit path (`components/actions/CashoutCard.tsx`). Stellar uses `submitTransferInterpret` and

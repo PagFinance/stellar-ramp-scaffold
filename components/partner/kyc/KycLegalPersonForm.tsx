@@ -20,6 +20,7 @@ import { useKycLookup } from '@/hooks/useKycLookup'
 import { companyToFormPatch, companyBlockingIssue, ownersFromQsa } from '@/lib/partner/kycAutofill'
 import { isValidCNPJ, onlyCnpjChars, onlyDigits } from '@/lib/partner/kycValidation'
 import { maskCnpj, maskCpf } from '@/lib/partner/documentMask'
+import KybCompanyChecks from './KybCompanyChecks'
 import type { UseKyc } from '@/hooks/useKyc'
 import type {
   KycLegalPersonRequest,
@@ -115,6 +116,13 @@ export default function KycLegalPersonForm({
   const [openOwner, setOpenOwner] = useState<string | null>(null)
   const firstOwnerUid = owners[0]?.uid ?? null
   const expandedOwner = openOwner ?? (owners.length === 1 ? firstOwnerUid : null)
+
+  // Quem assina pela empresa é quem a partner-api coloca na documentoscopia.
+  // Sem representante marcado não há ninguém para verificar, e o envio é
+  // recusado (400 KYB_REPRESENTATIVE_MISSING) - então o formulário cobra antes.
+  const hasRepresentative = owners.some(
+    (o) => o.ownerType === 'LEGAL_REPRESENTATIVE' || o.ownerType === 'BOTH',
+  )
 
   const lookupState = useKycLookup()
   const [blocked, setBlocked] = useState<string | null>(null)
@@ -224,6 +232,11 @@ export default function KycLegalPersonForm({
       })
     }
 
+    if (!mappedOwners.some((o) => o.ownerType === 'LEGAL_REPRESENTATIVE' || o.ownerType === 'BOTH'))
+      return toast.error(
+        'Marque ao menos um sócio como representante legal: é a identidade dele que será verificada.',
+      )
+
     const body: KycLegalPersonRequest = {
       externalUserId: externalUserId.trim(),
       documentNumber: cnpj,
@@ -255,20 +268,33 @@ export default function KycLegalPersonForm({
       noValidate
     >
       {/*
-        BUG-H18 (docs/known-issues.md): a partner-api não tem provider de PJ
-        ativo - BigDataCorp recusa pessoa jurídica e o Celcoin está desligado em
-        runtime - então POST /users/kyc/sessions/legal-person SEMPRE responde
-        503. O aviso vem antes do formulário para o usuário não preencher a
-        empresa inteira e o quadro societário só para tomar erro no fim. A
-        consulta de CNPJ abaixo funciona normalmente.
+        O KYB tem DUAS pernas, e dizer isso antes do formulário evita a surpresa
+        de a empresa ser reprovada no envio (perna 1) ou de aparecer um link de
+        selfie no fim (perna 2). Ver partner-api docs/07.
       */}
       <div style={{ marginBottom: 'var(--space-6)' }}>
-        <LookupNotice variant="warn">
-          <strong>Envio de KYB indisponível.</strong> Ainda não há provider de pessoa jurídica
-          ativo, então o envio retorna erro. A consulta de CNPJ funciona e preenche os dados da
-          empresa e do quadro societário.
+        <LookupNotice variant="info">
+          <strong>Como funciona.</strong> A empresa é conferida na Receita Federal (CNPJ ativo,
+          razão social e quadro societário) e, em seguida, o <strong>representante legal</strong>{' '}
+          faz a verificação de documento e selfie. Consulte o CNPJ abaixo para preencher tudo com os
+          dados oficiais e passar de primeira.
         </LookupNotice>
       </div>
+
+      {/*
+        Reprovação da empresa (422): a sessão nem chega a ser criada, então este
+        bloco - e não o trilho lateral - é onde o resultado aparece.
+      */}
+      {kyc.companyRejection ? (
+        <div style={{ marginBottom: 'var(--space-6)' }}>
+          <LookupNotice variant="error">
+            <strong>Empresa reprovada na verificação cadastral.</strong>
+            <div style={{ marginTop: 10 }}>
+              <KybCompanyChecks verification={kyc.companyRejection} />
+            </div>
+          </LookupNotice>
+        </div>
+      ) : null}
 
       <FormSection
         index={1}
@@ -353,6 +379,16 @@ export default function KycLegalPersonForm({
         note={`${owners.length} sócio(s). Clique para abrir e completar os dados de cada um.`}
       >
         {qsaNotice ? <LookupNotice variant="warn">{qsaNotice}</LookupNotice> : null}
+
+        {/* Cobrado aqui, e não só no envio: é a diferença entre descobrir a
+            exigência antes de preencher os sócios ou depois. */}
+        {!hasRepresentative ? (
+          <LookupNotice variant="warn">
+            Marque quem assina pela empresa com o papel <strong>Representante legal</strong> (ou{' '}
+            <strong>Sócio e representante</strong>). É essa pessoa que fará a verificação de
+            documento e selfie.
+          </LookupNotice>
+        ) : null}
 
         <div>
           {owners.map((o, i) => {
@@ -504,15 +540,17 @@ export default function KycLegalPersonForm({
       <div className="kyc-actions">
         <button
           type="submit"
-          disabled={disabled || !externalUserId || Boolean(blocked)}
+          disabled={disabled || !externalUserId || Boolean(blocked) || !hasRepresentative}
           className="btn btn-primary"
         >
           {kyc.busy ? 'Enviando…' : 'Enviar KYB'}
         </button>
         <p className="hint">
-          {externalUserId
-            ? 'Os dados vão para o provider de verificação via Partner API.'
-            : 'Conecte uma carteira para enviar - a identidade da verificação é vinculada a ela.'}
+          {!externalUserId
+            ? 'Conecte uma carteira para enviar - a identidade da verificação é vinculada a ela.'
+            : !hasRepresentative
+              ? 'Falta marcar o representante legal no quadro societário.'
+              : 'A empresa é conferida na Receita Federal e o representante legal recebe o link da verificação.'}
         </p>
       </div>
     </form>

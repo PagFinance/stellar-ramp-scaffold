@@ -31,6 +31,12 @@ export class PartnerRequestError extends Error {
     public status: number,
     message: string,
     public code?: string,
+    /**
+     * Conteúdo estruturado do erro, quando a rota manda um. Hoje só o 422 do
+     * KYB (`{ companyVerification }`), que a tela usa para mostrar QUAL check
+     * reprovou em vez de só a mensagem agregada.
+     */
+    public data?: unknown,
   ) {
     super(message)
     this.name = 'PartnerRequestError'
@@ -67,7 +73,7 @@ async function request<T>(
 
   if (!res.ok || json.success === false) {
     const msg = json.error ?? json.message ?? `Erro (${res.status}).`
-    throw new PartnerRequestError(res.status, msg, json.code)
+    throw new PartnerRequestError(res.status, msg, json.code, json.data)
   }
   return (json.data ?? ({} as T)) as T
 }

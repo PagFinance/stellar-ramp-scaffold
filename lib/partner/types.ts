@@ -293,11 +293,41 @@ export interface KycLegalPersonRequest {
 export type KycSessionStatusValue =
   'PENDING' | 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'EXPIRED' | 'ERROR'
 
+// ── KYB: verificação cadastral da empresa ────────────────────────────────────
+// A partner-api NÃO compra onboarding de PJ: ela orquestra o KYB em duas pernas
+// - o confronto do CNPJ com a Receita Federal (síncrono, o bloco abaixo) e a
+// documentoscopia do REPRESENTANTE LEGAL (assíncrona, é ela que leva a sessão a
+// APPROVED/REJECTED). Ver partner-api docs/07.
+
+export type KybCheckId =
+  'CNPJ_FOUND' | 'CNPJ_ACTIVE' | 'BUSINESS_NAME_MATCH' | 'REPRESENTATIVE_IN_QSA'
+
+/** SKIPPED = a fonte não trouxe o dado para decidir. NÃO é reprovação. */
+export type KybCheckStatus = 'PASS' | 'FAIL' | 'SKIPPED'
+
+export interface KybCheck {
+  id: KybCheckId
+  status: KybCheckStatus
+  /** Mensagem em pt-BR, já pronta para exibir. */
+  message: string
+}
+
+export interface KybCompanyVerification {
+  status: 'VERIFIED' | 'REJECTED'
+  /** Provider da cadeia que respondeu (opencnpj | bigdatacorp). */
+  source: string
+  checkedAt: string
+  checks: KybCheck[]
+  officialName?: string
+  taxIdStatus?: string
+  rejectionReason?: string | null
+}
+
 /** Sessão KYC/KYB sanitizada (resposta do parceiro). */
 export interface KycSession {
   sessionId: string
   externalUserId: string
-  type: string // 'NATURAL_PERSON' | 'LEGAL_PERSON'
+  type: string // 'PF' | 'PJ'
   provider: string
   providerSessionId: string
   providerTransactionId: string | null
@@ -307,6 +337,10 @@ export interface KycSession {
   status: KycSessionStatusValue
   webViewUrl: string | null
   rejectionReason: string | null
+  /** Só em sessões PJ: resultado da perna EMPRESA. Null no PF. */
+  companyVerification?: KybCompanyVerification | null
+  /** Só em sessões PJ: CPF mascarado de quem faz a documentoscopia. Null no PF. */
+  representativeMasked?: string | null
   createdAt: string
   updatedAt: string
   completedAt: string | null
