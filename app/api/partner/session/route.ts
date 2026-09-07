@@ -15,6 +15,7 @@ import {
   verifyWalletSignature,
   issueSessionToken,
   resolveSessionAddress,
+  sessionCookieOptions,
 } from '@/lib/server/partnerSession'
 import { preflight, enforceRateLimit, ok, fail } from '@/lib/partner/routeHelpers'
 import { corsHeaders } from '@/lib/server/cors'
@@ -84,13 +85,7 @@ export async function POST(req: Request) {
     { success: true, error: null, data: { ok: true, address } },
     { status: 200, headers: { ...corsHeaders(), 'Cache-Control': 'no-store' } },
   )
-  res.cookies.set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: SESSION_MAX_AGE,
-  })
+  res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions(SESSION_MAX_AGE))
   return res
 }
 
@@ -99,12 +94,6 @@ export async function DELETE(req: Request) {
     { success: true, error: null, data: { ok: true } },
     { status: 200, headers: { ...corsHeaders(), 'Cache-Control': 'no-store' } },
   )
-  res.cookies.set(SESSION_COOKIE, '', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 0,
-  })
+  res.cookies.set(SESSION_COOKIE, '', sessionCookieOptions(0))
   return res
 }
