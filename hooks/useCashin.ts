@@ -97,6 +97,10 @@ export function useCashin(): UseCashin {
   // endereço de agora pediria o status de uma cobrança de outra carteira, que a
   // rota recusa com 403.
   const chargeSender = useRef<string | null>(null)
+  // O id com que o polling foi aberto. `charge.intentId` NÃO serve: a partner-api
+  // pode devolver a cobrança só com `correlationID`, e é esse o id que `pollStatus`
+  // recebe. Ler `intentId` no resume deixava essas cobranças sem retomada possível.
+  const chargeIntentId = useRef<string | undefined>(undefined)
 
   const busy = phase === 'quoting' || phase === 'creating'
 
@@ -110,6 +114,7 @@ export function useCashin(): UseCashin {
   const reset = useCallback(() => {
     clearPoll()
     chargeSender.current = null
+    chargeIntentId.current = undefined
     setPhase('idle')
     setError(null)
     setQuote(null)
@@ -173,9 +178,11 @@ export function useCashin(): UseCashin {
         }
       } catch (e) {
         // Nem todo erro de polling é transitório, e tratar os dois casos igual foi
-        // o que travou a tela: a sessão de carteira expira em 1h sem renovação
-        // (lib/server/partnerSession.ts), a rota passa a responder 401
-        // SESSION_REQUIRED, e nada aqui reautentica. Antes isto caía num `catch {}`
+        // o que travou a tela: a sessão de carteira acaba (1h ociosa, ou o teto
+        // absoluto de 12h desde a assinatura - lib/server/partnerSession.ts), a rota
+        // passa a responder 401 SESSION_REQUIRED, e nada aqui reautentica. A janela
+        // deslizante torna isso raro numa aba ativa, não impossível: o teto absoluto
+        // vence de qualquer jeito. Antes isto caía num `catch {}`
         // vazio, então o loop repetia o MESMO 401 a cada 4s sem sair de
         // `awaiting_payment`: cobranças pagas e entregues on-chain seguiam exibindo
         // "Aguardando pagamento" para sempre. E a aba zumbi continuava gastando o
@@ -268,9 +275,11 @@ export function useCashin(): UseCashin {
         setCharge(data)
         setPhase('awaiting_payment')
         deadline.current = Date.now() + (data.expiresIn ?? 3600) * 1000
-        // Guardado para o resume: a carteira ativa pode mudar sozinha depois daqui.
+        // Guardados para o resume: a carteira ativa pode mudar sozinha depois daqui,
+        // e o id acompanhado nem sempre é o `intentId`.
         chargeSender.current = activeAddress
-        pollStatus(data.intentId ?? data.correlationID, activeAddress)
+        chargeIntentId.current = data.intentId ?? data.correlationID
+        pollStatus(chargeIntentId.current, activeAddress)
         return data
       } catch (e) {
         setError(toMessage(e))
@@ -287,8 +296,13 @@ export function useCashin(): UseCashin {
   // sessão válida para o endereço errado, e o polling seguiria em 403.
   const resumeTracking = useCallback(async (): Promise<boolean> => {
     const sender = chargeSender.current
-    const intentId = charge?.intentId
-    if (!sender || !intentId) return false
+    const intentId = chargeIntentId.current
+    if (!sender || !intentId) {
+      // Nunca cair fora em silêncio: o card só mostra um toast genérico, e o erro
+      // em tela continuaria sendo o 401 que trouxe a fase até aqui.
+      setError('Não há cobrança em acompanhamento para retomar. Gere uma nova cobrança.')
+      return false
+    }
     if (activeAddress !== sender) {
       setError(
         `Reconecte a carteira que criou esta cobrança (${sender}) para retomar o acompanhamento.`,
@@ -301,7 +315,7 @@ export function useCashin(): UseCashin {
     setPhase('awaiting_payment')
     pollStatus(intentId, sender)
     return true
-  }, [charge, activeAddress, ensureSession, pollStatus])
+  }, [activeAddress, ensureSession, pollStatus])
 
   // Limpa o timer de polling ao desmontar (evita fetch/setState órfãos).
   useEffect(() => () => clearPoll(), [])

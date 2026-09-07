@@ -203,7 +203,9 @@ at quote/charge time and passed straight through whenever the address matched. N
 absolute cap** counted from the signature (`sst` claim) that no renewal can move. Both clocks are
 needed: without sliding the session dies mid-charge, without the cap the 4s status poll would renew
 it forever. Legacy tokens with no `sst` fall back to `iat`, so the deploy invalidates nothing.
-See `docs/04-partner-api.md` → *Wallet session*.
+Covered by `tests/partnerSession.test.ts` (the two clocks) and `tests/partnerSessionRefresh.test.ts`
+(the renewal side effect itself, with `next/headers` mocked). See `docs/04-partner-api.md` →
+*Wallet session*.
 
 ### NOTE-S3 - the status poll swallowed every error, including the fatal ones - ✅ FIXED
 **Location:** `hooks/useCashin.ts`
@@ -214,7 +216,9 @@ reading "awaiting payment", and the zombie tab kept spending the **60 req/min pe
 `enforceRateLimit`, which is what produced the `429`s seen on healthy tabs in parallel (the poll
 costs 15 req/min per open tab, so four tabs reach the ceiling). Now `401`/`403` stop the loop and
 move to a `tracking_lost` phase with a *Retomar acompanhamento* button; everything else, `429`
-included, still retries.
+included, still retries. `resumeTracking` resumes on the id the poll was actually opened with
+(`intentId ?? correlationID`, kept in a ref) - reading `charge.intentId` left a charge that came back
+with only a `correlationID` with no way to resume. Covered by `tests/useCashin.test.ts`.
 
 ### NOTE-S4 - the card described the live wallet, not the charge in flight - ✅ FIXED
 **Location:** `components/actions/CashinCard.tsx`

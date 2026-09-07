@@ -65,6 +65,11 @@ plus `prettier`).
   `useCashin`, `useCashout`, `useKyc`, `useKycLookup` all expose `{ busy, error, data, <action>(),
   reset() }` and are driven by a user action, not by render. Follow the sibling hook when adding
   one; reach for TanStack Query when you introduce genuinely derived/cached server state.
+- Testes de hook rodam em **jsdom**, não em node: o `vitest.config.ts` é `environment: 'node'` por
+  padrão (mais rápido, e é o que as rotas/libs precisam), então um teste de hook abre com o docblock
+  `// @vitest-environment jsdom` e usa `renderHook`/`act` do `@testing-library/react` -
+  `tests/useCashin.test.ts` é o modelo. Mocke o módulo do cliente com `importOriginal` quando o hook
+  fizer `instanceof PartnerRequestError`: dublar a classe testa o dublê.
 - Do not call a wallet SDK (wagmi, solana/tron adapters, xrpl) directly from a component. Go through
   the chain `useSlice`; reach server code only via `app/api/*`.
 - Secrets stay server-side: server modules start with `import 'server-only'` (present in
