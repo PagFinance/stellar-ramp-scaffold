@@ -33,6 +33,10 @@ function statusBadge(phase: string, status?: string) {
   if (phase === 'completed' || st === 'COMPLETED') return 'Pago ✓'
   if (phase === 'expired' || st === 'EXPIRED') return 'Expirada'
   if (phase === 'awaiting_payment') return 'Aguardando pagamento…'
+  // Nunca reaproveitar 'Aguardando pagamento…' aqui: nesta fase o app PAROU de
+  // perguntar, então ele não sabe se o Pix foi pago. Foi exatamente essa mentira
+  // que fez uma cobrança paga e entregue on-chain seguir exibindo "aguardando".
+  if (phase === 'tracking_lost') return 'Acompanhamento parado'
   return st || '-'
 }
 
@@ -73,6 +77,24 @@ export default function CashinCard() {
   const created = Boolean(c)
   const quoted = Boolean(q)
 
+  // O destino que ESTA cotação prometeu, congelado no instante da cotação.
+  //
+  // A partir do quote a entrega está decidida: a partner-api guarda o destino no
+  // snapshot da cotação e a cobrança se amarra a ele. Já `activeAddress` é lido do
+  // estado ATUAL da carteira e muda sem clique nenhum - basta o usuário trocar de
+  // conta na Freighter, ou reconectar com outra. Descrever a cobrança em curso com
+  // o endereço de agora faz o rodapé prometer a entrega para a carteira errada.
+  const [promisedDestination, setPromisedDestination] = useState<string | null>(null)
+
+  // O que a tela DEVE descrever: o destino prometido pela cotação enquanto houver
+  // uma, senão a carteira conectada agora.
+  const shownDestination = promisedDestination ?? activeAddress
+
+  // A carteira ativa deixou de ser a que vai receber esta cotação.
+  const walletDrifted = Boolean(
+    promisedDestination && activeAddress && activeAddress !== promisedDestination,
+  )
+
   const onQuote = async () => {
     const amt = Number(amount)
     if (!Number.isFinite(amt) || amt <= 0) {
@@ -85,8 +107,11 @@ export default function CashinCard() {
       assetId: asset?.id,
       destinationWallet: activeAddress ?? undefined,
     })
-    if (res) toast.success('Cotação gerada - confira o valor a receber.')
-    else toast.error('Não foi possível cotar. Veja o detalhe abaixo.')
+    if (res) {
+      // Exatamente o que foi enviado como `destinationWallet` acima.
+      setPromisedDestination(activeAddress ?? null)
+      toast.success('Cotação gerada - confira o valor a receber.')
+    } else toast.error('Não foi possível cotar. Veja o detalhe abaixo.')
   }
 
   const onConfirm = async () => {
@@ -104,6 +129,17 @@ export default function CashinCard() {
     })
     if (res) toast.success('Cobrança criada - escaneie o QR para pagar.')
     else toast.error('Não foi possível gerar a cobrança. Veja o detalhe abaixo.')
+  }
+
+  const onReset = () => {
+    setPromisedDestination(null)
+    cashin.reset()
+  }
+
+  const onResume = async () => {
+    const ok = await cashin.resumeTracking()
+    if (ok) toast.success('Acompanhamento retomado.')
+    else toast.error('Não foi possível retomar. Veja o detalhe abaixo.')
   }
 
   // Enter no formulário dispara a ação primária da fase atual (cotar → gerar cobrança).
@@ -266,7 +302,7 @@ export default function CashinCard() {
                 </button>
                 <button
                   type="button"
-                  onClick={cashin.reset}
+                  onClick={onReset}
                   disabled={cashin.busy}
                   className="btn btn-outline"
                 >
@@ -274,14 +310,26 @@ export default function CashinCard() {
                 </button>
               </>
             ) : (
-              <button
-                type="button"
-                onClick={cashin.reset}
-                disabled={cashin.busy}
-                className="btn btn-outline"
-              >
-                Nova cobrança
-              </button>
+              <>
+                {cashin.phase === 'tracking_lost' && (
+                  <button
+                    type="button"
+                    onClick={() => void onResume()}
+                    disabled={cashin.busy}
+                    className="btn btn-primary"
+                  >
+                    Retomar acompanhamento
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onReset}
+                  disabled={cashin.busy}
+                  className="btn btn-outline"
+                >
+                  Nova cobrança
+                </button>
+              </>
             )}
           </div>
 
@@ -365,9 +413,18 @@ export default function CashinCard() {
         </div>
       </div>
 
+      {/* Modelo de entrega. Enquanto há cotação, descreve o destino PROMETIDO por
+          ela; antes disso, a carteira conectada agora. Nunca mistura os dois. */}
+      {walletDrifted && promisedDestination && (
+        <p style={{ ...helpText, color: 'var(--danger-ink)' }}>
+          A carteira conectada mudou para <code>{shortenAddress(activeAddress)}</code> depois desta
+          cotação. A entrega já está amarrada a <code>{shortenAddress(promisedDestination)}</code> e
+          não muda: para comprar na carteira de agora, gere uma nova cobrança.
+        </p>
+      )}
       <p style={helpText}>
-        Após o pagamento, {asset?.symbol ?? 'a cripto'} é entregue on-chain na carteira conectada (
-        <code>{shortenAddress(activeAddress)}</code>). Este scaffold compra apenas XLM na rede
+        Após o pagamento, {asset?.symbol ?? 'a cripto'} é entregue on-chain na carteira{' '}
+        <code>{shortenAddress(shownDestination)}</code>. Este scaffold compra apenas XLM na rede
         Stellar.
       </p>
     </section>
