@@ -103,7 +103,7 @@ Ed25519 signature (`verifyStellarSignature`) and issues an httpOnly session cook
 (`pf_partner_session`, HS256, `sub=address`). **Every** JWT-authed route (cash-in + cash-out, quote +
 intent + status) now calls `requireSender(req, clientSender)` and derives the trusted `sender` from
 the verified session - mismatch → 403, missing → 401. Client: `lib/partner/session.ts` +
-`useCashout`/`useCashin` (`ensureSession`, one signature/hour); session auto-cleared on wallet
+`useCashout`/`useCashin` (`ensureSession`, one signature per session); session auto-cleared on wallet
 disconnect (`HeaderWithConnect`). See `docs/04-partner-api.md` → *Wallet session*.
 **Gated by `APP_SESSION_SECRET`:** enforced when set (production); in dev (unset) the routes fall
 back to the client `sender` with a warning so the local demo still runs. **Set the secret in
@@ -177,3 +177,54 @@ PF flow over their CPF. See partner-api `docs/07-kyc-onboarding.md`.
 > all before any webview opens: `400 KYB_REPRESENTATIVE_MISSING`, `422 KYB_COMPANY_REJECTED` (no
 > session is persisted - fix and resend), `503 KYB_REGISTRY_UNAVAILABLE` (the registry check **fails
 > closed**; retry). Covered by `tests/kyb-route.test.ts`.
+
+---
+
+## Cash-in status tracking - paid charge stuck on "awaiting payment" (2026-09-02)
+
+**Symptom.** A real R$5 onramp charge on the multichain scaffold was paid, delivered on-chain by the
+wallet-service, and the screen kept showing *Aguardando pagamento* indefinitely. DevTools showed a
+wall of `401`s on `GET /api/partner/cashin/intent/:intentId`. **No money was ever at risk**: the
+delivery runs in the partner-api and the wallet-service, and it completed. Only the browser's view of
+it broke. The three causes below are shared code, so this scaffold had all of them.
+
+### NOTE-S1 - the `401` came from OUR backend, not from the partner-api
+**Location:** `app/api/partner/cashin/intent/[intentId]/route.ts`, `lib/partner/routeHelpers.ts`
+`requireSender` returns `401 SESSION_REQUIRED` and the handler returns **before** ever calling
+`cashinIntentStatus`, so the partner-api is not involved in this failure at all. When triaging a
+`401` on `/api/partner/*`, read the response body first: `SESSION_REQUIRED` is ours, anything else
+came from upstream through `handleError`.
+
+### NOTE-S2 - the session had a hard 1h TTL and nothing renewed it - ✅ FIXED
+**Location:** `lib/server/partnerSession.ts`
+The cookie expired exactly 1h after signing even on an active tab, because `ensureSession` only ran
+at quote/charge time and passed straight through whenever the address matched. Now the idle window
+**slides** on every session read (`resolveSessionAddress` → `refreshSessionCookie`), under a **12h
+absolute cap** counted from the signature (`sst` claim) that no renewal can move. Both clocks are
+needed: without sliding the session dies mid-charge, without the cap the 4s status poll would renew
+it forever. Legacy tokens with no `sst` fall back to `iat`, so the deploy invalidates nothing.
+Covered by `tests/partnerSession.test.ts` (the two clocks) and `tests/partnerSessionRefresh.test.ts`
+(the renewal side effect itself, with `next/headers` mocked). See `docs/04-partner-api.md` →
+*Wallet session*.
+
+### NOTE-S3 - the status poll swallowed every error, including the fatal ones - ✅ FIXED
+**Location:** `hooks/useCashin.ts`
+`pollStatus` had a bare `catch {}` commented as "transient errors don't break the flow". A `401` is
+not transient: nothing in the loop reauthenticates, so it repeated the same failure every 4s forever
+without leaving `awaiting_payment`. Two consequences, both observed: a paid, delivered charge kept
+reading "awaiting payment", and the zombie tab kept spending the **60 req/min per-IP budget** of
+`enforceRateLimit`, which is what produced the `429`s seen on healthy tabs in parallel (the poll
+costs 15 req/min per open tab, so four tabs reach the ceiling). Now `401`/`403` stop the loop and
+move to a `tracking_lost` phase with a *Retomar acompanhamento* button; everything else, `429`
+included, still retries. `resumeTracking` resumes on the id the poll was actually opened with
+(`intentId ?? correlationID`, kept in a ref) - reading `charge.intentId` left a charge that came back
+with only a `correlationID` with no way to resume. Covered by `tests/useCashin.test.ts`.
+
+### NOTE-S4 - the card described the live wallet, not the charge in flight - ✅ FIXED
+**Location:** `components/actions/CashinCard.tsx`
+The delivery footer read `activeAddress` at render time, so it advertised whichever wallet is
+connected **now** rather than the destination the quote was bound to. Narrower here than on the
+multichain scaffold (`ChainId` is Stellar-only, so asset and network cannot drift), but the address
+still can: switching accounts in Freighter, or reconnecting with another wallet, changes
+`activeAddress` with no user action on this card. The card now freezes the destination the quote
+promised and warns when the connected wallet drifts away from it.

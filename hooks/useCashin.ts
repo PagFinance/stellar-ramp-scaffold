@@ -35,6 +35,10 @@ export type CashinPhase =
   | 'quoted'
   | 'creating'
   | 'awaiting_payment'
+  // A cobrança continua de pé, mas o app perdeu a sessão e PAROU de acompanhar.
+  // Distinta de 'failed' de propósito: nada falhou no pagamento, só no nosso
+  // acompanhamento dele, e o QR segue pagável.
+  | 'tracking_lost'
   | 'completed'
   | 'expired'
   | 'failed'
@@ -71,6 +75,8 @@ export interface UseCashin {
   status: CashinIntentStatus | null
   requestQuote: (input: RequestQuoteInput) => Promise<CashinQuoteResponse | null>
   confirmCharge: (input: ConfirmChargeInput) => Promise<CashinIntentResponse | null>
+  /** Reautentica e volta a acompanhar a cobrança atual após 'tracking_lost'. */
+  resumeTracking: () => Promise<boolean>
   reset: () => void
 }
 
@@ -85,6 +91,16 @@ export function useCashin(): UseCashin {
 
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const deadline = useRef<number>(0)
+  // O sender com que ESTA cobrança foi criada. Não é o mesmo que `activeAddress`:
+  // a carteira ativa é derivada de "primeira chain conectada" (useWalletWeb3) e
+  // muda sozinha quando a conexão de uma chain cai. Retomar o polling com o
+  // endereço de agora pediria o status de uma cobrança de outra carteira, que a
+  // rota recusa com 403.
+  const chargeSender = useRef<string | null>(null)
+  // O id com que o polling foi aberto. `charge.intentId` NÃO serve: a partner-api
+  // pode devolver a cobrança só com `correlationID`, e é esse o id que `pollStatus`
+  // recebe. Ler `intentId` no resume deixava essas cobranças sem retomada possível.
+  const chargeIntentId = useRef<string | undefined>(undefined)
 
   const busy = phase === 'quoting' || phase === 'creating'
 
@@ -97,6 +113,8 @@ export function useCashin(): UseCashin {
 
   const reset = useCallback(() => {
     clearPoll()
+    chargeSender.current = null
+    chargeIntentId.current = undefined
     setPhase('idle')
     setError(null)
     setQuote(null)
@@ -158,8 +176,29 @@ export function useCashin(): UseCashin {
           setPhase('expired')
           return
         }
-      } catch {
-        // erros transitórios de polling não derrubam o fluxo
+      } catch (e) {
+        // Nem todo erro de polling é transitório, e tratar os dois casos igual foi
+        // o que travou a tela: a sessão de carteira acaba (1h ociosa, ou o teto
+        // absoluto de 12h desde a assinatura - lib/server/partnerSession.ts), a rota
+        // passa a responder 401 SESSION_REQUIRED, e nada aqui reautentica. A janela
+        // deslizante torna isso raro numa aba ativa, não impossível: o teto absoluto
+        // vence de qualquer jeito. Antes isto caía num `catch {}`
+        // vazio, então o loop repetia o MESMO 401 a cada 4s sem sair de
+        // `awaiting_payment`: cobranças pagas e entregues on-chain seguiam exibindo
+        // "Aguardando pagamento" para sempre. E a aba zumbi continuava gastando o
+        // orçamento de 60 req/min por IP do rate-limit (lib/partner/routeHelpers.ts),
+        // provocando 429 nas abas vivas.
+        //
+        // 401 (sessão ausente/expirada) e 403 (sender não bate com a sessão) são
+        // definitivos: repetir devolve o mesmo erro. Param o loop e viram estado
+        // visível. Todo o resto (rede oscilando, 429, 5xx) é transitório de verdade
+        // e continua no loop, que é o comportamento que valia a pena preservar.
+        if (e instanceof PartnerRequestError && (e.status === 401 || e.status === 403)) {
+          pollTimer.current = null
+          setError(`${e.message} A cobrança continua válida: retome o acompanhamento.`)
+          setPhase('tracking_lost')
+          return
+        }
       }
       if (Date.now() >= deadline.current) return // deixa de acompanhar após expiração
       pollTimer.current = setTimeout(tick, POLL_INTERVAL_MS)
@@ -236,7 +275,11 @@ export function useCashin(): UseCashin {
         setCharge(data)
         setPhase('awaiting_payment')
         deadline.current = Date.now() + (data.expiresIn ?? 3600) * 1000
-        pollStatus(data.intentId ?? data.correlationID, activeAddress)
+        // Guardados para o resume: a carteira ativa pode mudar sozinha depois daqui,
+        // e o id acompanhado nem sempre é o `intentId`.
+        chargeSender.current = activeAddress
+        chargeIntentId.current = data.intentId ?? data.correlationID
+        pollStatus(chargeIntentId.current, activeAddress)
         return data
       } catch (e) {
         setError(toMessage(e))
@@ -247,11 +290,49 @@ export function useCashin(): UseCashin {
     [activeAddress, quote, pollStatus, ensureSession],
   )
 
+  // Retoma o acompanhamento de uma cobrança que caiu em 'tracking_lost'. Exige a
+  // MESMA carteira que criou a cobrança: a sessão prova posse de um endereço, e o
+  // status é lido sob ele. Reconectar outra carteira e reassinar produziria uma
+  // sessão válida para o endereço errado, e o polling seguiria em 403.
+  const resumeTracking = useCallback(async (): Promise<boolean> => {
+    const sender = chargeSender.current
+    const intentId = chargeIntentId.current
+    if (!sender || !intentId) {
+      // Nunca cair fora em silêncio: o card só mostra um toast genérico, e o erro
+      // em tela continuaria sendo o 401 que trouxe a fase até aqui.
+      setError('Não há cobrança em acompanhamento para retomar. Gere uma nova cobrança.')
+      return false
+    }
+    if (activeAddress !== sender) {
+      setError(
+        `Reconecte a carteira que criou esta cobrança (${sender}) para retomar o acompanhamento.`,
+      )
+      return false
+    }
+    if (!(await ensureSession())) return false
+    clearPoll()
+    setError(null)
+    setPhase('awaiting_payment')
+    pollStatus(intentId, sender)
+    return true
+  }, [activeAddress, ensureSession, pollStatus])
+
   // Limpa o timer de polling ao desmontar (evita fetch/setState órfãos).
   useEffect(() => () => clearPoll(), [])
 
   return useMemo<UseCashin>(
-    () => ({ phase, busy, error, quote, charge, status, requestQuote, confirmCharge, reset }),
-    [phase, busy, error, quote, charge, status, requestQuote, confirmCharge, reset],
+    () => ({
+      phase,
+      busy,
+      error,
+      quote,
+      charge,
+      status,
+      requestQuote,
+      confirmCharge,
+      resumeTracking,
+      reset,
+    }),
+    [phase, busy, error, quote, charge, status, requestQuote, confirmCharge, resumeTracking, reset],
   )
 }

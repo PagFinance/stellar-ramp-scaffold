@@ -281,10 +281,25 @@ Flow (`lib/server/partnerSession.ts`, `lib/partner/session.ts`, `hooks/useCashou
 3. `POST /api/partner/session { address, blockchain, publicKey?, signature, challengeToken }` →
    the server re-derives the message, verifies the Stellar Ed25519 signature via
    `@stellar/stellar-sdk` (`verifyWalletSignature` → `lib/chains/stellar/verifySignature.ts`), and
-   sets an **httpOnly session cookie** (`pf_partner_session`, HS256, `sub=address`, 1h).
+   sets an **httpOnly session cookie** (`pf_partner_session`, HS256, `sub=address`).
 4. **Every** JWT-authed cash-in/out route (`cashout/{quote,intent,status}`,
    `cashin/{quote,intent,status}`) calls `requireSender(req, clientSender)` → the trusted `sender`
    comes from the verified cookie; a mismatching client `sender` → **403**, no session → **401**.
+5. Each session read (`resolveSessionAddress`) **slides the idle window forward**, so an in-use tab
+   is never logged out mid-charge.
+
+**Two clocks on the session cookie, and both matter:**
+
+| Clock | Value | Behaviour |
+|-------|-------|-----------|
+| Idle (sliding) | 1h | Reopened by any authenticated request. Reissued only once the token has spent half the window, so the cash-in status poll (every 4s) does not stamp a `Set-Cookie` on every response. |
+| Absolute | 12h | Counted from the **signature** (`sst` claim), and no renewal moves it. Checked on verify as well as on issue. Past it, the wallet signs again (step 1). |
+
+Without the sliding window the session died exactly 1h after signing even on an active tab, which is
+what stranded a paid cash-in behind a silent `401` in the status poll. Without the absolute cap the
+sliding window never closes, because that same 4s poll would renew it forever, and a stolen cookie
+with it. A token issued before this (no `sst`) falls back to its `iat`, so deploying it does not
+invalidate live sessions.
 
 `GET /api/partner/session` returns `{ configured, address }`; `DELETE` logs out. The session is also
 cleared automatically on wallet disconnect / switch - `HeaderWithConnect` calls `endPartnerSession()`
@@ -292,7 +307,7 @@ whenever the authenticated `activeAddress` goes away or changes.
 
 **Two modes, gated by `APP_SESSION_SECRET`:**
 - **Secure (secret set):** the session is required on all JWT-authed routes; `useCashout` /
-  `useCashin` establish it transparently (one signature per hour) before quoting/confirming.
+  `useCashin` establish it transparently (one signature per session) before quoting/confirming.
 - **Dev (secret unset):** `sessionConfigured()` is false, the challenge is a no-op, and the routes
   fall back to the client `sender` with a `console.warn`. Keeps the local demo working with no extra
   setup. **Do not run production without `APP_SESSION_SECRET`.**
