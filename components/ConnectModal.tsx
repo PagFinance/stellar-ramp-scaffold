@@ -1,44 +1,24 @@
 'use client'
+//
+// O dialog COMPLETO de "Conectar carteira": overlay + portal + a11y de diálogo
+// (foco inicial, focus-trap, Escape, restauração de foco) + header. O conteúdo
+// é o <WalletOptions/> - quem quer o mesmo fluxo dentro de um dialog do próprio
+// design system usa WalletOptions direto.
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useStellarWallet } from '@/contexts/StellarWalletProvider'
-import { shortenAddress } from '@/lib/helpers/shortenAddress'
-import WalletRow, { type WalletRowProps } from '@/components/wallet/WalletRow'
-import { useToast } from '@/components/toast/ToastProvider'
-import { CHAIN_REGISTRY } from '@/lib/chains/registry'
-
-// Scaffold exclusivo do ecossistema Stellar. O Stellar Wallets Kit agrega as
-// carteiras (Freighter, Lobstr, xBull, Hana, Albedo) e abre o próprio modal de
-// seleção; aqui só oferecemos a entrada para esse fluxo.
+import WalletOptions from '@/components/WalletOptions'
 
 type Props = {
   open: boolean
   onClose: () => void
 }
 
-const STELLAR_ICON = CHAIN_REGISTRY.stellar.icon
-
 export default function ConnectModal({ open, onClose }: Props) {
-  const toast = useToast()
-
   const [mounted, setMounted] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
   const modalRef = useRef<HTMLDivElement | null>(null)
 
-  const {
-    connected: stellarConnected,
-    connecting: stellarConnecting,
-    address: stellarAddr,
-    connect: stellarConnect,
-    disconnect: stellarDisconnect,
-  } = useStellarWallet()
-
   useEffect(() => setMounted(true), [])
-
-  useEffect(() => {
-    if (!open) setErr(null)
-  }, [open])
 
   useEffect(() => {
     if (!open) return
@@ -80,34 +60,8 @@ export default function ConnectModal({ open, onClose }: Props) {
     }
   }, [open, mounted])
 
+  // Fechado = desmontado: o WalletOptions (e o erro dele) zera a cada abertura.
   if (!mounted || !open) return null
-
-  const fail = (message: string) => {
-    setErr(message)
-    toast.error(message)
-  }
-
-  const handleStellar = async () => {
-    setErr(null)
-    // O Stellar Wallets Kit abre o PRÓPRIO modal (authModal) e espera a seleção.
-    // Fechamos o nosso ANTES, senão o modal do kit renderiza ATRÁS do nosso.
-    onClose()
-    try {
-      await stellarConnect()
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Falha ao conectar a carteira Stellar.')
-    }
-  }
-
-  const handleDisconnect = async () => {
-    try {
-      await stellarDisconnect()
-      toast.success('Carteira desconectada.')
-      onClose()
-    } catch (e) {
-      fail(e instanceof Error ? e.message : 'Falha ao desconectar.')
-    }
-  }
 
   // ---------- styles ----------
   const overlay: React.CSSProperties = {
@@ -140,40 +94,6 @@ export default function ConnectModal({ open, onClose }: Props) {
     cursor: 'pointer',
     fontSize: 18,
   }
-  const list: React.CSSProperties = { display: 'grid', gap: 10 }
-  const errBox: React.CSSProperties = {
-    marginTop: 12,
-    padding: '10px 12px',
-    borderRadius: 10,
-    background: 'rgba(255,107,107,.08)',
-    border: '1px solid rgba(255,107,107,.3)',
-    color: '#ffb3b3',
-    fontSize: 13,
-  }
-  const trust: React.CSSProperties = {
-    marginTop: 14,
-    paddingTop: 12,
-    borderTop: '1px solid #1e2330',
-    color: '#8b94a6',
-    fontSize: 12,
-    lineHeight: 1.5,
-  }
-
-  const rows: Array<WalletRowProps & { key: string }> = [
-    {
-      key: 'net-stellar',
-      iconSrc: STELLAR_ICON,
-      iconAlt: 'Stellar',
-      label: 'Stellar',
-      subtitle: stellarConnected
-        ? `Conectada • ${shortenAddress(stellarAddr ?? '')}`
-        : 'Freighter, Lobstr, xBull, Hana, Albedo',
-      connected: stellarConnected,
-      connecting: stellarConnecting,
-      disabled: stellarConnecting,
-      onClick: stellarConnected ? handleDisconnect : handleStellar,
-    },
-  ]
 
   const content = (
     <div style={overlay} onClick={onClose}>
@@ -192,18 +112,7 @@ export default function ConnectModal({ open, onClose }: Props) {
           </button>
         </div>
 
-        <div style={{ ...list, marginTop: 6 }}>
-          {rows.map(({ key, ...rest }) => (
-            <WalletRow key={key} {...rest} />
-          ))}
-        </div>
-
-        {err && <div style={errBox}>{err}</div>}
-
-        <p style={trust}>
-          <span aria-hidden="true">🔒 </span>Nunca pedimos sua frase-semente. Você aprova cada
-          conexão e transação na sua própria carteira.
-        </p>
+        <WalletOptions onDone={onClose} />
       </div>
     </div>
   )

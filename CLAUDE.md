@@ -32,7 +32,7 @@ The transaction payload is built by the Partner API (`app/api/partner/*`), not t
 `hooks/useCashout.ts` takes the API-built instruction and hands it to the active wallet by
 capability. `lib/chains/registry.ts` (`CHAIN_ORDER`) is the single source of truth: the guard
 (`SingleConnectionGuard`) and `useWalletWeb3` derive from it.
-`ConnectModal` is hand-wired per chain. `CHAIN_ORDER` must exactly cover the `ChainId` union
+`WalletOptions` (the buttons; `ConnectModal` is only the dialog around it) is hand-wired per chain. `CHAIN_ORDER` must exactly cover the `ChainId` union
 (`lib/types/ChainTypes.ts`); `tests/registry.test.ts` fails the build if they diverge.
 
 ## Commands

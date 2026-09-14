@@ -85,13 +85,18 @@ payloads - the **raw UTF-8** message (most wallets, incl. Freighter) and the **S
 (`sha256("Stellar Signed Message:\n" + message)`) payload - in base64, base64url, or hex. Any valid
 signature of the real key over either one proves possession.
 
-## Connect UI - `components/ConnectModal.tsx`
+## Connect UI - `components/{ConnectModal,WalletOptions}.tsx`
 
-`ConnectModal` is the connect surface. With a single chain it offers one entry that hands off to the
-Stellar Wallets Kit's own `authModal()` (which lists Freighter/Lobstr/xBull/Hana/Albedo). It renders
-a `components/wallet/WalletRow.tsx` for the Stellar row and handles dialog a11y (initial focus,
-focus-trap, focus restoration - but it does **not** steal focus back from the kit's modal on
-handoff). `components/HeaderWithConnect.tsx` hosts the connect button and post-connect state
+The connect surface is two pieces, mirroring `@pagfinance/wallet-connect` in ramp-scaffold:
+
+- `components/WalletOptions.tsx` - the **buttons only**: the Stellar `WalletRow`, the error box and
+  the trust note. No overlay, no portal - drop it inside any host dialog. It calls `onDone` when the
+  connect/disconnect finishes **or** when it hands off to the Stellar Wallets Kit's own `authModal()`
+  (which lists Freighter/Lobstr/xBull/Hana/Albedo) - the host dialog must close there or the kit's
+  modal renders behind it. Mount it only while the dialog is open so the error state resets.
+- `components/ConnectModal.tsx` - the **dialog only**: overlay, portal, Escape, dialog a11y (initial
+  focus, focus-trap, focus restoration - but it does **not** steal focus back from the kit's modal on
+  handoff) and the header. It is `WalletOptions` with `onDone={onClose}`. `components/HeaderWithConnect.tsx` hosts the connect button and post-connect state
 (`AccountChip`), and clears the partner session when the connected address goes away or changes.
 
 ## Exclusivity - `components/common/SingleConnectionGuard.tsx`
