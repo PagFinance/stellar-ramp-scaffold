@@ -32,7 +32,7 @@ The transaction payload is built by the Partner API (`app/api/partner/*`), not t
 `hooks/useCashout.ts` takes the API-built instruction and hands it to the active wallet by
 capability. `lib/chains/registry.ts` (`CHAIN_ORDER`) is the single source of truth: the guard
 (`SingleConnectionGuard`) and `useWalletWeb3` derive from it.
-`ConnectModal` is hand-wired per chain. `CHAIN_ORDER` must exactly cover the `ChainId` union
+`WalletOptions` (the buttons; `ConnectModal` is only the dialog around it) is hand-wired per chain. `CHAIN_ORDER` must exactly cover the `ChainId` union
 (`lib/types/ChainTypes.ts`); `tests/registry.test.ts` fails the build if they diverge.
 
 ## Commands
@@ -69,7 +69,10 @@ plus `prettier`).
   padrão (mais rápido, e é o que as rotas/libs precisam), então um teste de hook abre com o docblock
   `// @vitest-environment jsdom` e usa `renderHook`/`act` do `@testing-library/react` -
   `tests/useCashin.test.ts` é o modelo. Mocke o módulo do cliente com `importOriginal` quando o hook
-  fizer `instanceof PartnerRequestError`: dublar a classe testa o dublê.
+  fizer `instanceof PartnerRequestError`: dublar a classe testa o dublê. Teste de componente com JSX
+  é `.tsx` (o include aceita `tests/**/*.test.{ts,tsx}`; JSX automático via `esbuild.jsx` no
+  config) - `tests/walletOptions.test.tsx` é o modelo: testa o contrato `onDone` antes do handoff
+  ao kit e erro que não fecha o dialog, não o happy path.
 - Do not call a wallet SDK (wagmi, solana/tron adapters, xrpl) directly from a component. Go through
   the chain `useSlice`; reach server code only via `app/api/*`.
 - Secrets stay server-side: server modules start with `import 'server-only'` (present in

@@ -92,7 +92,7 @@ QueryClientProvider
 
 ```
 app/                 App Router pages (/, /cashin, /cashout, /kyc) + app/api/partner/* routes
-components/          UI: ConnectModal, HeaderWithConnect, actions/*, partner/*, wallet/*, toast/*
+components/          UI: ConnectModal (dialog) → WalletOptions (buttons), HeaderWithConnect, actions/*, partner/*, wallet/*, toast/*
 contexts/            StellarWalletProvider (the single wallet backend)
 hooks/               useWalletWeb3, useCashout, useCashin, useKyc…
 lib/
