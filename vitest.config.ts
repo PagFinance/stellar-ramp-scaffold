@@ -10,9 +10,12 @@ export default defineConfig({
       'server-only': fileURLToPath(new URL('./tests/stubs/server-only.ts', import.meta.url)),
     },
   },
+  // Testes de componente (.tsx) usam JSX; o tsconfig é `jsx: preserve` (Next
+  // transpila), então o esbuild do vitest precisa do runtime automático aqui.
+  esbuild: { jsx: 'automatic' },
   test: {
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
     clearMocks: true,
   },
 })

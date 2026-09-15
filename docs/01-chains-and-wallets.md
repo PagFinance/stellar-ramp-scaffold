@@ -96,7 +96,10 @@ The connect surface is two pieces, mirroring `@pagfinance/wallet-connect` in ram
   modal renders behind it. Mount it only while the dialog is open so the error state resets.
 - `components/ConnectModal.tsx` - the **dialog only**: overlay, portal, Escape, dialog a11y (initial
   focus, focus-trap, focus restoration - but it does **not** steal focus back from the kit's modal on
-  handoff) and the header. It is `WalletOptions` with `onDone={onClose}`. `components/HeaderWithConnect.tsx` hosts the connect button and post-connect state
+  handoff) and the header. It is `WalletOptions` with `onDone={onClose}`.
+
+`tests/walletOptions.test.tsx` pins the contract between the two (`onDone` before the kit handoff,
+disconnect errors keep the dialog open, Escape / close / backdrop close it). `components/HeaderWithConnect.tsx` hosts the connect button and post-connect state
 (`AccountChip`), and clears the partner session when the connected address goes away or changes.
 
 ## Exclusivity - `components/common/SingleConnectionGuard.tsx`
